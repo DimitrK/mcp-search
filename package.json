@@ -1,0 +1,17 @@
+{
+  "name": "mpc-search",
+  "version": "1.0.0",
+  "description": "MCP server for web search and reading page contents.",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "mcp",
+    "web-search",
+    "page-crawl",
+    "rag-web-page"
+  ],
+  "author": "DimitrK",
+  "license": "MIT"
+}
