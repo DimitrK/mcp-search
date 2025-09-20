@@ -245,6 +245,7 @@ LIMIT ?;
 - **Protocol Version**: Target latest MCP protocol version with backward compatibility considerations.
 - **Tool Descriptions**: Clear, agent-friendly descriptions for both tools explaining their purpose and usage.
 - **Schema Validation**: Strict input validation using Zod schemas before processing.
+- **Debugging Support**: Compatible with MCP library's debugging tools and inspector for development and troubleshooting.
 
 ### Project Structure
 
