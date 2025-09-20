@@ -143,17 +143,18 @@ CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (m
 
 Notes:
 
-- Determine and persist `embedding_dim` on first embed; fail fast if mismatched later.
+- Store both `embedding_model` and `embedding_dim` in `meta` table on first embed; validate both on startup to ensure consistency.
 - All similarity search operations are scoped by `url`.
 - Upsert only changed/new chunks using stable content hashes.
+- Connection pooling manages concurrent access to file-based DuckDB.
 
 ### Content Processing Pipeline
 
 - **Fetch**: `undici` with timeout (`REQUEST_TIMEOUT_MS`), custom user agent, gzip/br compression. Use conditional GET via `If-None-Match` when `etag` stored. `forceRefresh` bypasses cache.
 - **Extract**: Primary `@mozilla/readability` on JSDOM-parsed, sanitized DOM. Fallback `cheerio` targeting `article|main|div[role=main]`; remove `nav|aside|footer` and class patterns `(nav|menu|breadcrumb|footer|sidebar|promo|subscribe|cookie|gdpr|container|section)`.
 - **Skeleton DOM detection**: Trigger Playwright fallback when: text density < 1%, `<p>` count < 5, or readability output < 500 chars.
-- **Optional JS render**: Dynamic `playwright` import only when skeleton DOM detected.
-- **Semantic chunking**: Build blocks by headings (`h1–h6`) and semantic HTML elements (`section`, `article`). Check for semantic class names (`container`, `section`). Split by paragraphs/sentences, merge to `EMBEDDING_TOKENS_SIZE` with 10–15% overlap.
+- **Optional JS render**: Dynamic `playwright` import only when skeleton DOM detected. Worker pool (max 2 instances) with auto-recycling after 50 requests to prevent memory leaks.
+- **Semantic chunking**: Build blocks by headings (`h1–h6`) and semantic HTML elements (`section`, `article`). Check for semantic class names (`container`, `section`). Split by paragraphs/sentences, merge to `EMBEDDING_TOKENS_SIZE` with configurable overlap (default 15%). Structure designed for future content-type awareness (code blocks, tables, lists).
 - **Deduplication**: Drop duplicates by content hash and near-duplicates by cosine similarity > 0.98 or min-hash comparison.
 - **Token estimation**: Use ~4 chars/token heuristic for chunk sizing.
 - **Hashing**: `content_hash = sha256(extracted_main_text)`. Stable chunk `id = sha256(url + '|' + sectionPath + '|' + text)`.
@@ -202,16 +203,25 @@ LIMIT ?;
 - **Error Classification**: `TimeoutError`, `NetworkError`, `ExtractionError`, `EmbeddingError` with structured MCP-compliant responses.
 - **Timeouts**: Produce classified errors including `REQUEST_TIMEOUT_MS` context.
 - **HTTP errors**: 401/403/paywall → respond with `note: 'content protected'` and omit chunks.
+- **Extraction fallback chain**: Readability → Cheerio → Playwright → Raw text stripper (last resort: strip HTML tags).
 - **Embedding failures**: Degrade gracefully by returning longest content blocks with `note: 'embedding provider unavailable; returning raw'`.
-- **Extraction failures**: Fallback sequence (Readability → Cheerio → optional Playwright) then fail with descriptive note if still empty.
+- **Vector search failures**: Fall back to returning full content chunks when similarity search fails.
+- **Database lock contention**: Connection pool with timeout and retry for DuckDB file locking issues.
 - **Network failures**: Single retry for 5xx with exponential backoff and jitter; no retry for 429 rate limits.
 - **Graceful degradation**: Always attempt to return partial results when possible.
 
+### Performance Optimizations
+
+- **Parallel processing**: Multiple queries in `readFromPage` embed concurrently within `CONCURRENCY` limits.
+- **Batch operations**: DuckDB inserts/updates performed in transactions for better performance.
+- **Connection pooling**: Managed DuckDB connections for concurrent request handling.
+- **Pipeline optimization**: Overlap fetching, extraction, and embedding where possible.
+
 ### Logging, Security, Observability
 
-- Logging: `pino` debug level in development; redact secrets; log fetches, cache hits, embedding batches, DB init.
+- Logging: `pino` debug level in development; redact secrets; log fetches, cache hits, embedding batches, DB init. Correlation IDs for request tracing.
 - Security: only `http(s)` URLs; strip scripts/styles; ignore robots as specified; no auth flows.
-- Observability: no metrics/health checks in MVP.
+- Observability: No-op metrics collector interface with hooks for future monitoring integration.
 
 ### Development Approach & Code Quality
 
@@ -219,7 +229,7 @@ LIMIT ?;
 - **Modular Design**: Isolated modules by logic and domain responsibility; loose coupling, high cohesion.
 - **File Organization**: Break code into small files; folders represent domain repositories of similar components.
 - **Testability**: Design for easy unit testing; dependency injection where appropriate; mock-friendly interfaces.
-- **ESLint Configuration**: 
+- **ESLint Configuration**:
   - `eslint:recommended`, `@typescript-eslint/recommended`
   - `plugin:prettier/recommended`
   - Custom rules: no implicit any, no floating promises, prefer const, explicit return types on public APIs
@@ -305,8 +315,10 @@ test/
 
 ### Future Iterations
 
-- Local embeddings via `node-llama-cpp` (GGUF models)
-- PDF and other file type parsing
-- Metrics and health checks
-- Regional settings for Google
-- Robots handling toggle
+- **Vector store abstraction**: Interface layer allowing swap from DuckDB VSS to specialized vector DBs (Qdrant, Weaviate) for better scaling beyond ~100k embeddings
+- **Advanced chunking**: Content-type detection for code blocks, tables, and lists with specialized processing
+- **Local embeddings**: via `node-llama-cpp` (GGUF models)
+- **PDF and other file type parsing**
+- **Metrics and health checks**
+- **Regional settings for Google**
+- **Robots handling toggle**

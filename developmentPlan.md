@@ -36,6 +36,11 @@ This development plan breaks down the MCP server implementation into incremental
    - Add basic logging setup with secret redaction
    - Ensure compatibility with MCP debugging/inspector tools
 
+5. **Hello World MCP Tool**
+   - Implement `debug.echo` tool that accepts any input and returns it
+   - Verify complete MCP request/response pipeline works end-to-end
+   - Test with MCP inspector to ensure tool registration and execution
+
 ### Acceptance Criteria:
 
 - [ ] `npm run build` produces clean output in `dist/`
@@ -319,7 +324,57 @@ web.readFromPage({
 
 ---
 
-## Milestone 7: Comprehensive Testing & Quality
+## Milestone 7: Observability & Debugging
+
+**Goal**: Add structured logging, request tracing, and debugging capabilities.
+
+### Tasks:
+
+1. **Structured Logging Enhancement** (TDD approach)
+   
+   - Write unit tests for correlation ID system first
+   - Implement correlation IDs for all log entries to pass tests
+   - Add request tracing through the entire pipeline (test-first)
+   - Add performance timing logs for key operations (test-first)
+
+2. **Debug Tooling** (TDD approach)
+
+   - Write unit tests for CLI debug commands first  
+   - Implement CLI commands for database inspection to pass tests
+   - Add health check endpoints/commands (test-first)
+   - Implement request replay capabilities (test-first)
+
+3. **Metrics Hooks** (TDD approach)
+
+   - Write unit tests for no-op metrics collector first
+   - Implement metrics collector interface to pass tests
+   - Add timing collection points throughout pipeline (test-first)
+   - Add memory usage monitoring hooks (test-first)
+
+### Acceptance Criteria:
+
+- [ ] All requests can be traced end-to-end via correlation IDs
+- [ ] CLI tools provide useful database inspection capabilities
+- [ ] Performance metrics are collected at key pipeline points
+- [ ] Memory usage can be monitored during operation
+- [ ] Request replay works for debugging complex scenarios
+
+### Verification:
+
+```bash
+# Test correlation ID tracing
+mpc-search debug-server --trace-requests
+
+# Test database inspection
+mpc-search inspect-db --url "https://example.com"
+
+# Verify metrics collection
+# Should show timing data in structured logs
+```
+
+---
+
+## Milestone 8: Comprehensive Testing & Quality
 
 **Goal**: Achieve comprehensive test coverage and code quality standards.
 
@@ -365,7 +420,7 @@ npm run test:performance
 
 ---
 
-## Milestone 8: Production Readiness & Documentation
+## Milestone 9: Production Readiness & Documentation
 
 **Goal**: Prepare for production deployment with proper documentation and tooling.
 
@@ -376,6 +431,18 @@ npm run test:performance
    - Implement optional CLI for debugging
    - Add health check commands
    - Add database inspection utilities
+   - Add development scripts to package.json:
+     ```json
+     {
+       "scripts": {
+         "test:watch": "jest --watch",
+         "test:debug": "node --inspect-brk jest",
+         "db:inspect": "mcp-search inspect-db",
+         "mcp:debug": "mcp-search debug-server",
+         "dev:with-inspector": "concurrently 'npm run build:watch' 'mcp-search server'"
+       }
+     }
+     ```
 
 2. **Docker Support**
 
@@ -466,15 +533,16 @@ docker run -p 3000:3000 mpc-search
 
 ## Timeline Estimate
 
-- **Milestone 1**: 2-3 days
+- **Milestone 1**: 3-4 days (MCP setup can be tricky)
 - **Milestone 2**: 3-4 days
 - **Milestone 3**: 4-5 days
 - **Milestone 4**: 5-6 days
-- **Milestone 5**: 4-5 days
+- **Milestone 5**: 6-7 days (embedding integration often has surprises)
 - **Milestone 6**: 6-7 days
-- **Milestone 7**: 4-5 days
-- **Milestone 8**: 3-4 days
+- **Milestone 7**: 3-4 days (new observability milestone)
+- **Milestone 8**: 4-5 days
+- **Milestone 9**: 3-4 days
 
 _Note: Timeline includes TDD approach with unit tests written alongside implementation_
 
-Each milestone includes buffer time for debugging, refinement, and unexpected issues. The plan prioritizes working software at each step with clear verification criteria.
+Each milestone includes buffer time for debugging, refinement, and unexpected issues. The plan prioritizes working software at each step with clear verification criteria. **Additional buffer**: 5-7 days total for integration issues and refactoring across all milestones.
