@@ -16,19 +16,21 @@
 ### Technology Stack
 
 - **Language/Runtime**: TypeScript, Node 20+ (ESM)
-- **MCP SDK**: `modelcontextprotocol`
-- **Validation**: `zod`
-- **HTTP**: `undici`
-- **HTML extraction**: `@mozilla/readability`, `cheerio`
+- **MCP SDK**: `modelcontextprotocol` (latest version, best effort backward compatibility)
+- **Validation**: `zod` with schema validation
+- **HTTP**: `undici` with connection pooling
+- **HTML extraction**: `@mozilla/readability`, `cheerio`, `jsdom`
 - **Optional rendering**: `playwright` (dynamic import)
 - **Rate limiting**: `rate-limiter-flexible`
 - **In-memory cache**: `node-cache`
 - **Persistent store**: `duckdb` with VSS extension
 - **Filesystem paths**: `env-paths`
-- **Logging**: `pino`
+- **Hashing**: Node.js built-in `crypto` (SHA-256)
+- **Logging**: `pino` with structured logging
 - **Build**: `tsup` (esbuild)
 - **Testing**: Jest + `ts-jest`, `nock` (HTTP mocks), `msw` optional
-- **Lint/format**: ESLint (`@typescript-eslint`), Prettier
+- **Lint/format**: ESLint (`@typescript-eslint/recommended`, best practices rules), Prettier
+- **Package**: NPM distribution with proper exports and optional CLI
 
 ### Environment Variables
 
@@ -147,11 +149,14 @@ Notes:
 
 ### Content Processing Pipeline
 
-- **Fetch**: `undici` with timeout (`REQUEST_TIMEOUT_MS`), custom UA, gzip/br. Use conditional GET via `If-None-Match` when `etag` stored. `forceRefresh` bypasses cache.
-- **Extract**: Primary `@mozilla/readability` on sanitized DOM. Fallback `cheerio` targeting `article|main|div[role=main]`; remove `nav|aside|footer` and class patterns `(nav|menu|breadcrumb|footer|sidebar|promo|subscribe|cookie|gdpr)`.
-- **Optional JS render**: dynamic `playwright` import only when skeleton DOM is detected (low text density, low `<p>` count, very short readability output).
-- **Chunk**: Build blocks by headings (`h1–h6`) within the main subtree. Split by paragraphs/sentences, then merge to `EMBEDDING_TOKENS_SIZE` with 10–15% overlap. Drop duplicates by hash or cosine > 0.98.
-- **Hashing**: `content_hash = sha256(extracted_main_text)`. Chunk `id = sha256(url + '|' + sectionPath + '|' + text)`.
+- **Fetch**: `undici` with timeout (`REQUEST_TIMEOUT_MS`), custom user agent, gzip/br compression. Use conditional GET via `If-None-Match` when `etag` stored. `forceRefresh` bypasses cache.
+- **Extract**: Primary `@mozilla/readability` on JSDOM-parsed, sanitized DOM. Fallback `cheerio` targeting `article|main|div[role=main]`; remove `nav|aside|footer` and class patterns `(nav|menu|breadcrumb|footer|sidebar|promo|subscribe|cookie|gdpr|container|section)`.
+- **Skeleton DOM detection**: Trigger Playwright fallback when: text density < 1%, `<p>` count < 5, or readability output < 500 chars.
+- **Optional JS render**: Dynamic `playwright` import only when skeleton DOM detected.
+- **Semantic chunking**: Build blocks by headings (`h1–h6`) and semantic HTML elements (`section`, `article`). Check for semantic class names (`container`, `section`). Split by paragraphs/sentences, merge to `EMBEDDING_TOKENS_SIZE` with 10–15% overlap.
+- **Deduplication**: Drop duplicates by content hash and near-duplicates by cosine similarity > 0.98 or min-hash comparison.
+- **Token estimation**: Use ~4 chars/token heuristic for chunk sizing.
+- **Hashing**: `content_hash = sha256(extracted_main_text)`. Stable chunk `id = sha256(url + '|' + sectionPath + '|' + text)`.
 
 ### Similarity Search
 
@@ -194,10 +199,13 @@ LIMIT ?;
 
 ### Error Handling
 
-- Timeouts produce classified errors including `REQUEST_TIMEOUT_MS` context.
-- 401/403/paywall → respond with `note: 'content protected'` and omit chunks.
-- Embeddings down → degrade gracefully as specified.
-- Extractor failure → fallback sequence (Readability → Cheerio → optional Playwright) then fail with note if still empty.
+- **Error Classification**: `TimeoutError`, `NetworkError`, `ExtractionError`, `EmbeddingError` with structured MCP-compliant responses.
+- **Timeouts**: Produce classified errors including `REQUEST_TIMEOUT_MS` context.
+- **HTTP errors**: 401/403/paywall → respond with `note: 'content protected'` and omit chunks.
+- **Embedding failures**: Degrade gracefully by returning longest content blocks with `note: 'embedding provider unavailable; returning raw'`.
+- **Extraction failures**: Fallback sequence (Readability → Cheerio → optional Playwright) then fail with descriptive note if still empty.
+- **Network failures**: Single retry for 5xx with exponential backoff and jitter; no retry for 429 rate limits.
+- **Graceful degradation**: Always attempt to return partial results when possible.
 
 ### Logging, Security, Observability
 
@@ -205,35 +213,87 @@ LIMIT ?;
 - Security: only `http(s)` URLs; strip scripts/styles; ignore robots as specified; no auth flows.
 - Observability: no metrics/health checks in MVP.
 
+### Development Approach & Code Quality
+
+- **Clean Code Practices**: Small functions with single responsibilities, clear naming conventions, explicit return types.
+- **Modular Design**: Isolated modules by logic and domain responsibility; loose coupling, high cohesion.
+- **File Organization**: Break code into small files; folders represent domain repositories of similar components.
+- **Testability**: Design for easy unit testing; dependency injection where appropriate; mock-friendly interfaces.
+- **ESLint Configuration**: 
+  - `eslint:recommended`, `@typescript-eslint/recommended`
+  - `plugin:prettier/recommended`
+  - Custom rules: no implicit any, no floating promises, prefer const, explicit return types on public APIs
+- **Code Structure**: Domain-driven folder structure with clear separation of concerns.
+
 ### Build, Test, Release
 
-- Build: `tsup` to `dist/` ESM; include type declarations.
-- Tests: Jest (`ts-jest`). Unit tests for extractor, chunker, hasher, embedding provider, DB queries. Integration tests for both tools with mocked HTTP and HTML fixtures. Golden tests for deterministic chunk IDs.
-- CI: lint, typecheck, test on Node 20/22; tag-triggered publish to npm.
-- Package: exports MCP server entry; optional `bin` for local debug.
+- **Build**: `tsup` to `dist/` ESM output; include TypeScript declarations; tree-shaking enabled.
+- **Package.json**: Proper `exports` map, `bin` entry for CLI, peer dependencies for optional packages.
+- **Tests**: Jest (`ts-jest`) with comprehensive coverage:
+  - **Unit tests**: extractor, chunker, hasher, embedding provider, DB queries, token estimation
+  - **Integration tests**: both MCP tools with mocked HTTP (`nock`) and HTML fixtures
+  - **Golden tests**: deterministic chunk IDs and content extraction
+  - **Error handling tests**: all error scenarios and fallback behaviors
+- **CI/CD**: GitHub Actions with lint, typecheck, test matrix on Node 20/22; automated npm publish on git tags.
+- **NPM Package**: Public package with MCP server entry point and optional CLI for debugging.
+- **Docker support**: For containerized deployments
+
+### MCP Protocol Requirements
+
+- **Tool Registration**: Proper MCP tool metadata with descriptions, input/output schemas.
+- **Error Responses**: MCP-compliant structured error responses with appropriate error codes.
+- **Protocol Version**: Target latest MCP protocol version with backward compatibility considerations.
+- **Tool Descriptions**: Clear, agent-friendly descriptions for both tools explaining their purpose and usage.
+- **Schema Validation**: Strict input validation using Zod schemas before processing.
 
 ### Project Structure
 
 ```
 src/
-  server.ts
-  config/environment.ts
-  mcp/schemas.ts
-  mcp/tools/webSearch.ts
-  mcp/tools/web.readFromPage.ts
-  core/search/googleClient.ts
-  core/content/fetcher.ts
-  core/content/extractor.ts
-  core/content/chunker.ts
-  core/content/hasher.ts
-  core/vector/embeddingProvider.ts
-  core/vector/providers/http.ts
-  core/vector/store/duckdb.ts
-  services/webScraper.ts           # dynamic playwright import
-  utils/*
+  server.ts                        # MCP server entry point
+  config/
+    environment.ts                 # Environment variable validation
+    constants.ts                   # Application constants
+  mcp/
+    schemas.ts                     # Zod schemas for tool inputs/outputs
+    tools/
+      webSearch.ts                 # web.search tool implementation
+      readFromPage.ts              # web.readFromPage tool implementation
+    errors.ts                      # MCP-compliant error classes
+  core/
+    search/
+      googleClient.ts              # Google Custom Search API client
+      rateLimiter.ts               # Rate limiting logic
+    content/
+      httpContentFetcher.ts        # HTTP content fetching
+      htmlContentExtractor.ts      # HTML content extraction (Readability + Cheerio)
+      chunker.ts            # Semantic content chunking
+      hasher.ts             # Content hashing utilities
+    vector/
+      embeddingProvider.ts         # Embedding provider interface
+      providers/
+        httpEmbeddingProvider.ts   # HTTP embedding provider (OpenAI-compatible)
+        # Future: localEmbeddingProvider.ts for node-llama-cpp
+      store/
+        duckdbVectorStore.ts       # DuckDB + VSS storage implementation
+        vectorStoreSchema.ts       # Database schema definitions
+  services/
+    playwrightWebScraper.ts        # Optional Playwright integration (dynamic import)
+  utils/
+    tokenEstimator.ts              # Token counting utilities (~4 chars/token)
+    urlValidator.ts                # URL validation and normalization
+    logger.ts                      # Structured logging setup
+    cache.ts                       # In-memory caching utilities
 test/
-  unit/*
-  integration/*
+  unit/
+    core/                          # Unit tests for core modules
+    utils/                         # Unit tests for utilities
+  integration/
+    tools/                         # Integration tests for MCP tools
+  fixtures/
+    htmlSamples/                   # Test HTML fixtures
+    apiResponses/                  # Mock API response fixtures
+  __mocks__/                       # Jest mocks
 ```
 
 ### Non-Functional Targets (MVP)
