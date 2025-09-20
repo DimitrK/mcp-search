@@ -22,6 +22,7 @@ This development plan breaks down the MCP server implementation into incremental
    - Setup Prettier integration
    - Configure Jest for testing
    - Setup GitHub Actions workflow
+   - Initialize `DATA_DIR` via env-paths and ensure directories exist
 
 3. **Create project structure**
 
@@ -32,7 +33,8 @@ This development plan breaks down the MCP server implementation into incremental
 4. **Basic MCP server skeleton**
    - Implement minimal MCP server with `modelcontextprotocol`
    - Register empty tool stubs (`web.search`, `web.readFromPage`)
-   - Add basic logging setup
+   - Add basic logging setup with secret redaction
+   - Ensure compatibility with MCP debugging/inspector tools
 
 ### Acceptance Criteria:
 
@@ -61,10 +63,12 @@ npx @modelcontextprotocol/inspector mcp-search
 ### Tasks:
 
 1. **Google Search Client** (TDD approach)
+
    - Write unit tests for `core/search/googleClient.ts` first
    - Implement Google client to pass tests
    - Add API key validation and error handling (test-first)
    - Implement rate limiting with `rate-limiter-flexible` (test-first)
+   - Map `safeSearch` (off→off, moderate/strict→active) (test-first)
 
 2. **Search Tool Implementation** (TDD approach)
    - Write unit tests for `mcp/tools/webSearch.ts` first
@@ -100,18 +104,22 @@ web.search({ query: "TypeScript MCP", resultsPerQuery: 5 })
 ### Tasks:
 
 1. **HTTP Content Fetcher** (TDD approach)
+
    - Write unit tests for `core/content/httpContentFetcher.ts` first
    - Implement fetcher to pass tests
    - Add timeout handling and custom user agent (test-first)
    - Implement conditional GET with ETag support (test-first)
    - Add basic error classification (test-first)
+   - Enforce `http(s)` URL scheme and normalize URLs (test-first)
 
 2. **DuckDB Vector Store Setup** (TDD approach)
+
    - Write unit tests for `core/vector/store/duckdbVectorStore.ts` first
    - Implement vector store to pass tests
    - Create database schema and VSS index setup (test-first)
    - Add basic CRUD operations for documents and chunks (test-first)
    - Implement connection management (test-first)
+   - Initialize `meta` table; persist and validate `embedding_dim` and model name (test-first)
 
 3. **Content Hashing** (TDD approach)
    - Write unit tests for `core/content/hasher.ts` first
@@ -149,6 +157,7 @@ ls ~/.local/share/mpc-search/db/mpc.duckdb
 ### Tasks:
 
 1. **HTML Content Extractor** (TDD approach)
+
    - Write unit tests for `core/content/htmlContentExtractor.ts` first
    - Implement extractor to pass tests
    - Integrate `@mozilla/readability` with JSDOM (test-first)
@@ -156,6 +165,7 @@ ls ~/.local/share/mpc-search/db/mpc.duckdb
    - Implement skeleton DOM detection (test-first)
 
 2. **Content Chunking** (TDD approach)
+
    - Write unit tests for `core/content/chunker.ts` first
    - Implement chunker to pass tests
    - Add semantic HTML-aware chunking (test-first)
@@ -167,6 +177,7 @@ ls ~/.local/share/mpc-search/db/mpc.duckdb
    - Implement scraper to pass tests
    - Add dynamic import for optional dependency (test-first)
    - Implement fallback trigger logic (test-first)
+   - Ensure Playwright is only invoked when skeleton DOM heuristics are met (test-first)
 
 ### Acceptance Criteria:
 
@@ -198,13 +209,16 @@ extractor.extract('<html>...test content...</html>').then(console.log);
 ### Tasks:
 
 1. **HTTP Embedding Provider** (TDD approach)
+
    - Write unit tests for `core/vector/providers/httpEmbeddingProvider.ts` first
    - Implement provider to pass tests
    - Add OpenAI-compatible API integration (test-first)
    - Implement request batching (~32 texts per request) (test-first)
    - Add retry logic and error handling (test-first)
+   - Validate provider returns consistent embedding dimension (test-first)
 
 2. **Embedding Provider Interface** (TDD approach)
+
    - Write unit tests for `core/vector/embeddingProvider.ts` first
    - Define interface to pass tests
    - Add provider factory and configuration (test-first)
@@ -215,6 +229,7 @@ extractor.extract('<html>...test content...</html>').then(console.log);
    - Integrate embeddings with DuckDB VSS to pass tests
    - Implement similarity search queries (test-first)
    - Add embedding dimension validation (test-first)
+   - Store `last_crawled`, `etag`, and `content_hash` in `documents` (test-first)
 
 ### Acceptance Criteria:
 
@@ -246,26 +261,37 @@ provider.embed(['test text', 'another text']).then(console.log);
 ### Tasks:
 
 1. **Tool Integration** (TDD approach)
+
    - Write integration tests for `mcp/tools/readFromPage.ts` first
    - Complete tool implementation to pass tests
    - Integrate fetching, extraction, chunking, and embedding (test-first)
    - Implement caching and invalidation logic (test-first)
    - Add query processing and similarity search (test-first)
+   - Apply `SIMILARITY_THRESHOLD` filtering to results (test-first)
 
 2. **Caching Strategy** (TDD approach)
+
    - Write unit tests for caching logic first
    - Implement caching to pass tests
    - Add in-memory session cache (test-first)
    - Add persistent storage with ETag handling (test-first)
    - Implement `forceRefresh` functionality (test-first)
    - Add cache invalidation based on content changes (test-first)
+   - Include `lastCrawled` in responses; honor `includeMetadata` flag (test-first)
 
 3. **Error Handling & Degradation** (TDD approach)
+
    - Write unit tests for error scenarios first
    - Implement error handling to pass tests
    - Add comprehensive error classification (test-first)
    - Add graceful degradation paths (test-first)
    - Implement proper MCP error responses (test-first)
+   - Add `note` field in responses when degrading (test-first)
+
+4. **Concurrency & Backpressure** (TDD approach)
+   - Implement global `CONCURRENCY` limiter utility with backpressure
+   - Apply to network-bound tasks (fetch, search, embeddings) (test-first)
+   - Batch embeddings under the concurrency cap (test-first)
 
 ### Acceptance Criteria:
 
@@ -298,7 +324,6 @@ web.readFromPage({
 **Goal**: Achieve comprehensive test coverage and code quality standards.
 
 ### Tasks:
-
 
 1. **Integration Testing**
 
@@ -398,6 +423,7 @@ docker run -p 3000:3000 mpc-search
 ## Development Guidelines
 
 ### Test-Driven Development Workflow:
+
 1. **Red**: Write a failing unit test for new functionality
 2. **Green**: Write minimal code to make the test pass
 3. **Refactor**: Clean up code while keeping tests green
@@ -405,6 +431,7 @@ docker run -p 3000:3000 mpc-search
 5. **Document**: Update documentation as needed
 
 ### Daily Development Workflow:
+
 - Every new function/class starts with a unit test
 - Refactor for clean code principles
 - Manual verification using MCP inspector after each milestone
@@ -448,6 +475,6 @@ docker run -p 3000:3000 mpc-search
 - **Milestone 7**: 4-5 days
 - **Milestone 8**: 3-4 days
 
-*Note: Timeline includes TDD approach with unit tests written alongside implementation*
+_Note: Timeline includes TDD approach with unit tests written alongside implementation_
 
 Each milestone includes buffer time for debugging, refinement, and unexpected issues. The plan prioritizes working software at each step with clear verification criteria.
