@@ -6,8 +6,8 @@ const baseConfig = {
   target: 'node20',
   format: 'esm',
   sourcemap: true,
-  external: ['duckdb', 'playwright', 'pino', 'pino-pretty'],
   outdir: 'dist',
+  packages: 'external',
 };
 
 await Promise.all([
