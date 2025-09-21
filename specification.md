@@ -27,7 +27,7 @@
 - **Filesystem paths**: `env-paths`
 - **Hashing**: Node.js built-in `crypto` (SHA-256)
 - **Logging**: `pino` with structured logging
-- **Build**: `tsup` (esbuild)
+- **Build**: `tsdown` (esbuild)
 - **Testing**: Jest + `ts-jest`, `nock` (HTTP mocks), `msw` optional
 - **Lint/format**: ESLint (`@typescript-eslint/recommended`, best practices rules), Prettier
 - **Package**: NPM distribution with proper exports and optional CLI
@@ -47,7 +47,7 @@ EMBEDDING_MODEL_NAME
 Optional (defaults in parentheses):
 
 ```
-DATA_DIR                      # default via env-paths (e.g., ~/Library/Application Support/mpc-search)
+DATA_DIR                      # default via env-paths (e.g., ~/Library/Application Support/mcp-search)
 SIMILARITY_THRESHOLD          # default 0.72
 EMBEDDING_TOKENS_SIZE         # default 512
 REQUEST_TIMEOUT_MS            # default 20000
@@ -237,7 +237,7 @@ LIMIT ?;
 
 ### Build, Test, Release
 
-- **Build**: `tsup` to `dist/` ESM output; include TypeScript declarations; tree-shaking enabled.
+- **Build**: `tsdown` to `dist/` ESM output; include TypeScript declarations; tree-shaking enabled.
 - **Package.json**: Proper `exports` map, `bin` entry for CLI, peer dependencies for optional packages.
 - **Tests**: Jest (`ts-jest`) with comprehensive coverage:
   - **Unit tests**: extractor, chunker, hasher, embedding provider, DB queries, token estimation

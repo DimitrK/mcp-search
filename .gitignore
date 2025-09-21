@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+
+# Data directories
+data/
+db/
+*.duckdb
+*.duckdb.wal
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Lock files (keep package-lock.json for consistency)
+yarn.lock
+pnpm-lock.yaml
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# ESLint cache
+.eslintcache
+
+# Jest cache
+.jest/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/

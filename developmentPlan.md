@@ -150,7 +150,7 @@ fetcher.fetch('https://example.com').then(console.log);
 "
 
 # Verify database creation
-ls ~/.local/share/mpc-search/db/mpc.duckdb
+ls ~/.local/share/mcp-search/db/mpc.duckdb
 ```
 
 ---
@@ -363,10 +363,10 @@ web.readFromPage({
 
 ```bash
 # Test correlation ID tracing
-mpc-search debug-server --trace-requests
+mcp-search debug-server --trace-requests
 
 # Test database inspection
-mpc-search inspect-db --url "https://example.com"
+mcp-search inspect-db --url "https://example.com"
 
 # Verify metrics collection
 # Should show timing data in structured logs
@@ -475,12 +475,12 @@ npm run test:performance
 
 ```bash
 # Test NPM package installation
-npm install -g mpc-search
-mpc-search --help
+npm install -g mcp-search
+mcp-search --help
 
 # Test Docker deployment
-docker build -t mpc-search .
-docker run -p 3000:3000 mpc-search
+docker build -t mcp-search .
+docker run -p 3000:3000 mcp-search
 
 # Verify MCP connection works in container
 ```
