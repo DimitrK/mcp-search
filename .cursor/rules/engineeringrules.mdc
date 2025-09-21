@@ -2,6 +2,13 @@
 globs: src/**/*.ts,test/**
 alwaysApply: false
 ---
+# Principles
+Be a serious software engineer. Act like one. Behave. Be responsible in your deliverables. For example changing the eslint configuration to deprive a bad error such as unused vars is not a good pattern. Changing the check of test simply to pass while the logic is flawed is not a good pattern.
+
+Always run tests, lint and build after you touched some code.
+
+When possible use and define errors found in `src/mcp/errors.ts`
+
 ### Development Approach & Code Quality
 
 - **Clean Code Practices**: Small functions with single responsibilities, clear naming conventions, explicit return types.
