@@ -1,5 +1,6 @@
 import { request } from 'undici';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import type pino from 'pino';
 import { getEnvironment } from '../../config/environment';
 
 const GOOGLE_API_BASE_URL = 'https://www.googleapis.com';
@@ -22,8 +23,9 @@ export class GoogleClient {
   private searchEngineId: string;
   private concurrency: number;
   private limiter: RateLimiterMemory;
+  private logger?: pino.Logger;
 
-  constructor(apiKey: string, searchEngineId: string) {
+  constructor(apiKey: string, searchEngineId: string, logger?: pino.Logger) {
     if (!apiKey) {
       throw new Error('Google API key is required');
     }
@@ -34,6 +36,7 @@ export class GoogleClient {
     this.searchEngineId = searchEngineId;
     this.concurrency = getEnvironment().CONCURRENCY;
     this.limiter = new RateLimiterMemory({ points: this.concurrency, duration: 1 });
+    this.logger = logger;
   }
 
   private async singleSearch(
@@ -55,10 +58,15 @@ export class GoogleClient {
       for (;;) {
         try {
           await this.limiter.consume('google.customsearch');
+          this.logger?.debug({ query, url }, 'Rate limit token acquired');
           return;
         } catch (e) {
           const res = e as RateLimiterRes;
           const delayMs = Math.max(50, res.msBeforeNext ?? 100);
+          this.logger?.debug(
+            { query, delayMs, remainingPoints: res.remainingPoints },
+            'Rate limited; waiting'
+          );
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
@@ -70,8 +78,10 @@ export class GoogleClient {
       statusCode: number;
       responseBody: GoogleApiResponse;
     }> => {
+      this.logger?.debug({ query, url }, 'Issuing Google Custom Search request');
       const { statusCode, body } = await request(url, { method: 'GET' });
       const responseBody = (await body.json()) as GoogleApiResponse;
+      this.logger?.debug({ query, statusCode }, 'Google Custom Search response received');
       return { statusCode, responseBody };
     };
 
@@ -86,6 +96,10 @@ export class GoogleClient {
         responseBody = res.responseBody;
       } catch (networkErr) {
         lastError = networkErr as Error;
+        this.logger?.warn(
+          { query, error: lastError?.message },
+          'Google Custom Search network error'
+        );
         if (attempt === 0) {
           const jitter = 100 + Math.floor(Math.random() * 200) + attempt * 100;
           await new Promise(res => setTimeout(res, jitter));
@@ -102,6 +116,7 @@ export class GoogleClient {
       if (statusCode >= 500) {
         const message = responseBody.error?.message || 'An unknown error occurred';
         lastError = new Error(`Google API request failed with status ${statusCode}: ${message}`);
+        this.logger?.warn({ query, statusCode, message }, 'Google Custom Search server error');
         if (attempt === 0) {
           const jitter = 100 + Math.floor(Math.random() * 200) + attempt * 100;
           await new Promise(res => setTimeout(res, jitter));
@@ -113,9 +128,11 @@ export class GoogleClient {
       if (statusCode >= 400) {
         const message = responseBody.error?.message || 'An unknown error occurred';
         lastError = new Error(`Google API request failed with status ${statusCode}: ${message}`);
+        this.logger?.info({ query, statusCode, message }, 'Google Custom Search client error');
         break; // Do not retry 4xx including 429
       }
 
+      this.logger?.info({ query, statusCode }, 'Google Custom Search succeeded');
       return { query, result: responseBody };
     }
 
@@ -129,6 +146,7 @@ export class GoogleClient {
     }
   ): Promise<GoogleSearchResult> {
     const queries = Array.isArray(query) ? query : [query];
+    this.logger?.debug({ queriesCount: queries.length }, 'Starting batched Google searches');
 
     const searchPromises = queries.map(q => this.singleSearch(q, options?.resultsPerQuery));
 
@@ -139,6 +157,11 @@ export class GoogleClient {
       results.push(...(await Promise.all(batch)));
     }
 
-    return { queries: results };
+    const aggregated = { queries: results };
+    this.logger?.debug(
+      { queriesCount: aggregated.queries.length },
+      'Completed batched Google searches'
+    );
+    return aggregated;
   }
 }

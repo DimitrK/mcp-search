@@ -11,7 +11,7 @@ export async function handleWebSearch(
   logger.info({ input }, 'Processing web search request');
 
   const { GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID } = getEnvironment();
-  const googleClient = new GoogleClient(GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID);
+  const googleClient = new GoogleClient(GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID, logger);
 
   const rawResult = await googleClient.search(input.query, {
     resultsPerQuery: input.resultsPerQuery,
