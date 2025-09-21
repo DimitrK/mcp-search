@@ -43,12 +43,12 @@ This development plan breaks down the MCP server implementation into incremental
 
 ### Acceptance Criteria:
 
-- [ ] `npm run build` produces clean output in `dist/`
-- [ ] `npm run lint` passes without errors
-- [ ] `npm run test` runs (even with empty tests)
-- [ ] MCP server starts without errors
-- [ ] MCP debugging tools can connect to server
-- [ ] Environment variables are validated on startup
+- [x] `npm run build` produces clean output in `dist/`
+- [x] `npm run lint` passes without errors
+- [x] `npm run test` runs (even with empty tests)
+- [x] MCP server starts without errors
+- [x] MCP debugging tools can connect to server
+- [x] Environment variables are validated on startup
 
 ### Verification:
 
