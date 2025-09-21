@@ -52,7 +52,7 @@ function parseCliArgs(): ParsedArgs {
 async function main(): Promise<void> {
   const { values, positionals } = parseCliArgs();
 
-  // Handle help flag
+  // Handle help flag without requiring env
   if (values.help) {
     console.log(HELP_TEXT);
     process.exit(0);

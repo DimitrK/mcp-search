@@ -57,11 +57,26 @@ function createLogger(): pino.Logger {
   });
 }
 
-export const logger = createLogger();
+let cachedLogger: pino.Logger | null = null;
+export function getLogger(): pino.Logger {
+  if (!cachedLogger) cachedLogger = createLogger();
+  return cachedLogger;
+}
+
+export const logger: pino.Logger = new Proxy({} as pino.Logger, {
+  get: (_target, prop: string | symbol) => {
+    const real = getLogger();
+    const value = (real as unknown as Record<string | symbol, unknown>)[prop];
+    if (typeof value === 'function') {
+      return (value as (...args: unknown[]) => unknown).bind(real);
+    }
+    return value as unknown;
+  },
+});
 
 // Helper function to create child loggers with correlation IDs
 export function createChildLogger(correlationId: string): pino.Logger {
-  return logger.child({ correlationId });
+  return getLogger().child({ correlationId });
 }
 
 // Helper function to generate correlation IDs
