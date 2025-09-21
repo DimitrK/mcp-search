@@ -1,0 +1,33 @@
+---
+globs: src/**/*.ts,test/**
+alwaysApply: false
+---
+### Development Approach & Code Quality
+
+- **Clean Code Practices**: Small functions with single responsibilities, clear naming conventions, explicit return types.
+- **Modular Design**: Isolated modules by logic and domain responsibility; loose coupling, high cohesion.
+- **File Organization**: Break code into small files; folders represent domain repositories of similar components.
+- **Testability**: Design for easy unit testing; dependency injection where appropriate; mock-friendly interfaces.
+- **ESLint Configuration**:
+  - `eslint:recommended`, `@typescript-eslint/recommended`
+  - `plugin:prettier/recommended`
+  - Custom rules: no implicit any, no floating promises, prefer const, explicit return types on public APIs
+- **Code Structure**: Domain-driven folder structure with clear separation of concerns.
+- **TDD development**: Always write tests before submitting a response with new functionality. When refactoring always erify that tests pass and fix any failing issues.
+
+### Daily Development Workflow:
+
+- Every new function/class starts with a unit test
+- Refactor for clean code principles
+- Manual verification using MCP inspector after each milestone
+- Continuous refactoring with test safety net
+- Performance testing with realistic data
+- Update documentation as needed
+- Verify MCP debugging tools still work
+
+### Quality Gates:
+
+- All tests must pass before milestone completion
+- ESLint must pass without warnings
+- TypeScript must compile without errors
+- Manual verification steps must be completed

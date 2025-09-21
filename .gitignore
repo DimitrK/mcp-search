@@ -72,3 +72,4 @@ pids/
 test-results/
 playwright-report/
 .env
+.dist-old/
