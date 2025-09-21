@@ -3,7 +3,8 @@ import { z } from 'zod';
 // web.search tool schemas
 export const SearchInput = z.object({
   query: z.union([z.string(), z.array(z.string())]),
-  resultsPerQuery: z.number().int().min(1).max(50).default(10),
+  resultsPerQuery: z.number().int().min(1).max(50).default(5),
+  minimal: z.boolean().default(true).optional(),
 });
 
 export const SearchOutput = z.object({

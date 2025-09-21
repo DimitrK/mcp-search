@@ -83,11 +83,11 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ### Acceptance Criteria:
 
-- [ ] Single search query returns raw Google JSON
-- [ ] Array of queries returns results for each query
-- [ ] Rate limiting prevents API abuse
-- [ ] Proper error handling for API failures
-- [ ] All tests pass
+- [x] Single search query returns raw Google JSON
+- [x] Array of queries returns results for each query
+- [x] Rate limiting prevents API abuse
+- [x] Proper error handling for API failures
+- [x] All tests pass
 
 ### Verification:
 
