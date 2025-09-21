@@ -76,9 +76,6 @@ Search the web using Google Custom Search API.
 {
   query: string | string[],           // Single query or array of queries
   resultsPerQuery?: number,           // Results per query (1-50, default: 10)
-  region?: string,                    // Geographic region
-  language?: string,                  // Language preference
-  safeSearch?: "off" | "moderate" | "strict"  // Safe search setting
 }
 ```
 

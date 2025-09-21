@@ -73,7 +73,6 @@ npx @modelcontextprotocol/inspector mcp-search
    - Implement Google client to pass tests
    - Add API key validation and error handling (test-first)
    - Implement rate limiting with `rate-limiter-flexible` (test-first)
-   - Map `safeSearch` (off→off, moderate/strict→active) (test-first)
 
 2. **Search Tool Implementation** (TDD approach)
    - Write unit tests for `mcp/tools/webSearch.ts` first

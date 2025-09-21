@@ -20,9 +20,6 @@ export class GoogleClient {
     _query: string | string[],
     _options?: {
       resultsPerQuery?: number;
-      region?: string;
-      language?: string;
-      safeSearch?: 'off' | 'moderate' | 'strict';
     }
   ): Promise<GoogleSearchResult> {
     // TODO: Implement in Milestone 2

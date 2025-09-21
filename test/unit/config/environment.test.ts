@@ -31,7 +31,6 @@ describe('Environment Configuration', () => {
     expect(env.EMBEDDING_TOKENS_SIZE).toBe(512);
     expect(env.REQUEST_TIMEOUT_MS).toBe(20000);
     expect(env.CONCURRENCY).toBe(2);
-    expect(env.GOOGLE_SAFE_SEARCH).toBe('off');
   });
 
   test('should throw error for missing required variables', () => {

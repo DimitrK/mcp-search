@@ -16,7 +16,6 @@ const EnvironmentSchema = z.object({
   EMBEDDING_TOKENS_SIZE: z.coerce.number().int().positive().default(512),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
-  GOOGLE_SAFE_SEARCH: z.enum(['off', 'moderate', 'strict']).default('off'),
 
   // Node environment
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

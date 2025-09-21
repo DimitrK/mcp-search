@@ -52,7 +52,6 @@ SIMILARITY_THRESHOLD          # default 0.72
 EMBEDDING_TOKENS_SIZE         # default 512
 REQUEST_TIMEOUT_MS            # default 20000
 CONCURRENCY                   # default 2
-GOOGLE_SAFE_SEARCH            # off|moderate|strict (maps to GCS off|active), default off
 ```
 
 ### Tool Contracts (Zod)
@@ -61,10 +60,7 @@ GOOGLE_SAFE_SEARCH            # off|moderate|strict (maps to GCS off|active), de
 // web.search
 export const SearchInput = z.object({
   query: z.union([z.string(), z.array(z.string())]),
-  resultsPerQuery: z.number().int().min(1).max(50).default(10),
-  region: z.string().optional(),
-  language: z.string().optional(),
-  safeSearch: z.enum(['off', 'moderate', 'strict']).optional()
+  resultsPerQuery: z.number().int().min(1).max(50).default(5),
 });
 
 export const SearchOutput = z.object({
@@ -182,7 +178,6 @@ LIMIT ?;
 ### `web.search` Behavior
 
 - Accepts `string | string[]`; when array, execute in parallel up to `CONCURRENCY`. `resultsPerQuery` applies per item; total results = `x * n`.
-- Google SafeSearch mapping: `off` → `safe=off`, `moderate|strict` → `safe=active`.
 - Always returns raw Google JSON per input query.
 
 ### Caching & Invalidation
@@ -237,7 +232,7 @@ LIMIT ?;
 
 ### Build, Test, Release
 
-- **Build**: `tsdown` to `dist/` ESM output; include TypeScript declarations; tree-shaking enabled.
+- **Build**: `esbuild` to `dist/` ESM output; include TypeScript declarations; tree-shaking enabled.
 - **Package.json**: Proper `exports` map, `bin` entry for CLI, peer dependencies for optional packages.
 - **Tests**: Jest (`ts-jest`) with comprehensive coverage:
   - **Unit tests**: extractor, chunker, hasher, embedding provider, DB queries, token estimation
@@ -320,5 +315,4 @@ test/
 - **Local embeddings**: via `node-llama-cpp` (GGUF models)
 - **PDF and other file type parsing**
 - **Metrics and health checks**
-- **Regional settings for Google**
 - **Robots handling toggle**

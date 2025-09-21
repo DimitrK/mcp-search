@@ -4,9 +4,6 @@ import { z } from 'zod';
 export const SearchInput = z.object({
   query: z.union([z.string(), z.array(z.string())]),
   resultsPerQuery: z.number().int().min(1).max(50).default(10),
-  region: z.string().optional(),
-  language: z.string().optional(),
-  safeSearch: z.enum(['off', 'moderate', 'strict']).optional(),
 });
 
 export const SearchOutput = z.object({
@@ -49,7 +46,7 @@ export const ReadFromPageOutput = z.object({
 
 // debug.echo tool schemas
 export const DebugEchoInput = z.object({
-  message: z.string().min(1, "Message is required"),
+  message: z.string().min(1, 'Message is required'),
   metadata: z.record(z.unknown()).optional(),
 });
 

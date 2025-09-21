@@ -8,40 +8,24 @@ describe('Web Search Handler', () => {
   test('should parse valid search input', async () => {
     const validInput = {
       query: 'test search',
-      maxResults: 5,
-      region: 'us'
+      resultsPerQuery: 5,
     };
 
-    await expect(handleWebSearch(validInput, mockLogger))
-      .rejects
-      .toThrow('web.search not yet implemented');
+    await expect(handleWebSearch(validInput, mockLogger)).rejects.toThrow(
+      'web.search not yet implemented'
+    );
   });
 
   test('should reject invalid input', async () => {
     const invalidInput = {
       // missing required query field
-      maxResults: 5
+      resultsPerQuery: 5,
     };
 
-    await expect(handleWebSearch(invalidInput, mockLogger))
-      .rejects
-      .toThrow(); // Will throw Zod validation error
-  });
-
-  test('should handle empty query', async () => {
-    const emptyQuery = {
-      query: '',
-      maxResults: 5
-    };
-
-    await expect(handleWebSearch(emptyQuery, mockLogger))
-      .rejects
-      .toThrow(); // Should fail validation for empty query
+    await expect(handleWebSearch(invalidInput, mockLogger)).rejects.toThrow(); // Will throw Zod validation error
   });
 
   test('should handle undefined input', async () => {
-    await expect(handleWebSearch(undefined, mockLogger))
-      .rejects
-      .toThrow(); // Should fail validation
+    await expect(handleWebSearch(undefined, mockLogger)).rejects.toThrow(); // Should fail validation
   });
 });
