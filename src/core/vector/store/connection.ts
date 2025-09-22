@@ -19,7 +19,36 @@ export async function initDuckDb(): Promise<duckdb.Database> {
 
 export function promisifyConnect(db: duckdb.Database): Promise<duckdb.Connection> {
   return new Promise((resolve, reject) => {
-    db.connect((err, conn) => (err ? reject(err) : resolve(conn)));
+    const anyDb = db as unknown as {
+      connect:
+        | ((cb: (err: Error | null, conn: duckdb.Connection) => void) => void)
+        | (() => duckdb.Connection);
+    };
+
+    // Attempt synchronous connect first (supported by duckdb node bindings)
+    try {
+      const maybeConn = (anyDb.connect as unknown as () => unknown).call(anyDb) as unknown;
+      if (maybeConn && typeof maybeConn === 'object') {
+        const conn = maybeConn as duckdb.Connection;
+        // Heuristic: connection objects have run/all methods
+        if (typeof (conn as unknown as { run?: unknown }).run === 'function') {
+          resolve(conn);
+          return;
+        }
+      }
+    } catch {
+      // ignore and fallback to callback style
+    }
+
+    // Fallback to callback-based connect
+    try {
+      (anyDb.connect as (cb: (err: Error | null, conn: duckdb.Connection) => void) => void).call(
+        anyDb,
+        (err: Error | null, conn: duckdb.Connection) => (err ? reject(err) : resolve(conn))
+      );
+    } catch (e) {
+      reject(e as Error);
+    }
   });
 }
 export function promisifyRun(conn: duckdb.Connection, sql: string): Promise<void> {
@@ -34,11 +63,11 @@ export function promisifyRunParams(
   params: unknown[]
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    (
-      conn as unknown as {
-        run: (sql: string, params: unknown[], cb: (err: Error | null) => void) => void;
-      }
-    ).run(sql, params, (err: Error | null) => (err ? reject(err) : resolve()));
+    const c = conn as unknown as {
+      run: (...args: unknown[]) => void;
+    };
+    const cb = (err: Error | null) => (err ? reject(err) : resolve());
+    (c.run as unknown as (sql: string, ...rest: unknown[]) => void)(sql, ...params, cb);
   });
 }
 
@@ -49,14 +78,10 @@ export function promisifyAll<T = unknown>(
 ): Promise<T[]> {
   return new Promise((resolve, reject) => {
     const cb = (err: Error | null, rows?: T[]) => (err ? reject(err) : resolve(rows ?? []));
-    const c = conn as unknown as {
-      all: (
-        sql: string,
-        paramsOrCb: unknown[] | ((err: Error | null, rows?: T[]) => void),
-        cb?: (err: Error | null, rows?: T[]) => void
-      ) => void;
-    };
-    if (params) c.all(sql, params, cb);
-    else c.all(sql, cb);
+    const c = conn as unknown as { all: (...args: unknown[]) => void };
+    (c.all as unknown as (sql: string, ...rest: unknown[]) => void)(
+      sql,
+      ...(params && params.length > 0 ? [...params, cb] : [cb])
+    );
   });
 }

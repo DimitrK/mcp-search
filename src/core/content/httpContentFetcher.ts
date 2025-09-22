@@ -1,4 +1,5 @@
 import { request } from 'undici';
+import { brotliDecompressSync, gunzipSync, inflateSync } from 'zlib';
 import { getEnvironment } from '../../config/environment';
 import { TimeoutError, NetworkError } from '../../mcp/errors';
 
@@ -29,7 +30,7 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
 
   const headers: Record<string, string> = {
     'user-agent': 'mcp-search/0.1 (+https://github.com/your-username/mcp-search)',
-    'accept-encoding': 'gzip, br',
+    'accept-encoding': 'gzip, br, deflate',
   };
   if (options.etag) headers['if-none-match'] = options.etag;
   if (options.lastModified) headers['if-modified-since'] = options.lastModified;
@@ -60,7 +61,15 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
       return { statusCode, bodyText: '', etag, lastModified, notModified: true };
     }
 
-    const bodyText = await res.body.text();
+    const encoding = (
+      (res.headers?.['content-encoding'] as string | undefined) || ''
+    ).toLowerCase();
+    const ab = (await res.body.arrayBuffer()) as ArrayBuffer;
+    let buf: Buffer = Buffer.from(ab);
+    if (encoding.includes('br')) buf = brotliDecompressSync(buf);
+    else if (encoding.includes('gzip')) buf = gunzipSync(buf);
+    else if (encoding.includes('deflate')) buf = inflateSync(buf);
+    const bodyText = buf.toString('utf8');
     if (statusCode >= 400) {
       throw new NetworkError('HTTP error', statusCode);
     }

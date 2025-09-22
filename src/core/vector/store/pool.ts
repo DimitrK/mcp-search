@@ -48,7 +48,7 @@ export class DuckDbPool {
       const item = this.idle.pop()!;
       if (item.idleTimer) item.idleTimer.unref();
       if (now - item.lastUsed > this.idleTimeoutMs) {
-        this.evict(item.conn, true);
+        this.discardConnection(item.conn);
         continue;
       }
       return item.conn;
@@ -120,8 +120,26 @@ export class DuckDbPool {
   }
 
   private async createConnection(): Promise<Connection> {
-    return await new Promise((resolve, reject) => {
-      this.db.connect((err, conn) => (err ? reject(err) : resolve(conn)));
+    const anyDb = this.db as unknown as {
+      connect: ((cb: (err: Error | null, conn: duckdb.Connection) => void) => void) |
+        (() => duckdb.Connection);
+    };
+    try {
+      const maybeConn = (anyDb.connect as unknown as () => unknown).call(anyDb) as unknown;
+      if (maybeConn && typeof maybeConn === 'object') {
+        const conn = maybeConn as duckdb.Connection;
+        if (typeof (conn as unknown as { run?: unknown }).run === 'function') {
+          return conn;
+        }
+      }
+    } catch {
+      // ignore; fall through to callback style
+    }
+    return await new Promise<Connection>((resolve, reject) => {
+      (anyDb.connect as (cb: (err: Error | null, conn: duckdb.Connection) => void) => void).call(
+        anyDb,
+        (err: Error | null, conn: duckdb.Connection) => (err ? reject(err) : resolve(conn))
+      );
     });
   }
 
@@ -133,7 +151,7 @@ export class DuckDbPool {
     });
     this.idle.splice(0).forEach(i => {
       if (i.idleTimer) i.idleTimer.unref();
-      this.safeClose(i.conn);
+      this.shutdownDiscard(i.conn);
       this.total = Math.max(0, this.total - 1);
     });
   }

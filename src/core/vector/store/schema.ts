@@ -4,15 +4,21 @@ import { promisifyConnect, promisifyRun } from './connection';
 export async function runSchema(db: duckdb.Database): Promise<void> {
   const conn = await promisifyConnect(db);
   try {
-    try {
-      await promisifyRun(conn, `INSTALL vss;`);
-    } catch {
-      // ignore
-    }
-    try {
-      await promisifyRun(conn, `LOAD vss;`);
-    } catch {
-      // ignore
+    const skipVss =
+      process.env.SKIP_VSS_INSTALL === '1' ||
+      process.env.SKIP_VSS_INSTALL?.toLowerCase() === 'true';
+
+    if (!skipVss) {
+      try {
+        await promisifyRun(conn, `INSTALL vss;`);
+      } catch {
+        // ignore
+      }
+      try {
+        await promisifyRun(conn, `LOAD vss;`);
+      } catch {
+        // ignore
+      }
     }
 
     await promisifyRun(conn, `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
@@ -41,13 +47,15 @@ export async function runSchema(db: duckdb.Database): Promise<void> {
        );`
     );
     await promisifyRun(conn, `CREATE INDEX IF NOT EXISTS chunks_url_idx ON chunks(url);`);
-    try {
-      await promisifyRun(
-        conn,
-        `CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (metric='cosine');`
-      );
-    } catch {
-      // ignore
+    if (!skipVss) {
+      try {
+        await promisifyRun(
+          conn,
+          `CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (metric='cosine');`
+        );
+      } catch {
+        // ignore
+      }
     }
   } finally {
     conn.close();
