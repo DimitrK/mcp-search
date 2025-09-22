@@ -27,7 +27,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/test/**/*.ts'],
+    files: ['**/*.test.ts', '**/test/**/*.ts'],
     rules: {
       'no-console': 'off',
     },
