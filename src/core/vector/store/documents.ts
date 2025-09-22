@@ -1,5 +1,6 @@
 import duckdb from 'duckdb';
-import { promisifyConnect, promisifyRunParams, promisifyAll } from './connection';
+import { promisifyRunParams, promisifyAll } from './connection';
+import { getPool } from './pool';
 
 export interface DocumentRow {
   url: string;
@@ -11,8 +12,8 @@ export interface DocumentRow {
 }
 
 export async function upsertDocument(db: duckdb.Database, doc: DocumentRow): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  await pool.withConnection(async conn => {
     await promisifyRunParams(
       conn,
       `INSERT OR REPLACE INTO documents(url, title, etag, last_modified, last_crawled, content_hash)
@@ -26,28 +27,22 @@ export async function upsertDocument(db: duckdb.Database, doc: DocumentRow): Pro
         doc.content_hash ?? null,
       ]
     );
-  } finally {
-    conn.close();
-  }
+  });
 }
 export async function getDocument(db: duckdb.Database, url: string): Promise<DocumentRow | null> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  return await pool.withConnection(async conn => {
     const rows = await promisifyAll<DocumentRow>(conn, `SELECT * FROM documents WHERE url = ?`, [
       url,
     ]);
     return rows[0] ?? null;
-  } finally {
-    conn.close();
-  }
+  });
 }
 
 export async function deleteDocument(db: duckdb.Database, url: string): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  await pool.runInTransaction(async conn => {
     await promisifyRunParams(conn, `DELETE FROM documents WHERE url = ?`, [url]);
     await promisifyRunParams(conn, `DELETE FROM chunks WHERE url = ?`, [url]);
-  } finally {
-    conn.close();
-  }
+  });
 }

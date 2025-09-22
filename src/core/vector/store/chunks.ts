@@ -1,5 +1,6 @@
 import duckdb from 'duckdb';
-import { promisifyConnect, promisifyRun, promisifyRunParams, promisifyAll } from './connection';
+import { promisifyRunParams, promisifyAll } from './connection';
+import { getPool } from './pool';
 
 export interface ChunkRow {
   id: string;
@@ -18,9 +19,8 @@ export interface SimilarChunkRow {
 }
 
 export async function upsertChunks(db: duckdb.Database, chunks: ChunkRow[]): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
-    await promisifyRun(conn, 'BEGIN');
+  const pool = await getPool();
+  await pool.runInTransaction(async conn => {
     for (const c of chunks) {
       await promisifyRunParams(
         conn,
@@ -29,13 +29,7 @@ export async function upsertChunks(db: duckdb.Database, chunks: ChunkRow[]): Pro
         [c.id, c.url, c.section_path ?? null, c.text, c.tokens, c.embedding]
       );
     }
-    await promisifyRun(conn, 'COMMIT');
-  } catch (e) {
-    await promisifyRun(conn, 'ROLLBACK').catch(() => undefined);
-    throw e;
-  } finally {
-    conn.close();
-  }
+  });
 }
 
 export async function similaritySearch(
@@ -45,8 +39,8 @@ export async function similaritySearch(
   limit: number,
   dimension = 1536
 ): Promise<SimilarChunkRow[]> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  return await pool.withConnection(async conn => {
     const cast = `?::FLOAT[${dimension}]`;
     const sql = `SELECT id, text, section_path,
        1 - (embedding <=> ${cast}) AS score
@@ -56,25 +50,19 @@ export async function similaritySearch(
      LIMIT ?`;
     const rows = await promisifyAll<SimilarChunkRow>(conn, sql, [embedding, url, embedding, limit]);
     return rows;
-  } finally {
-    conn.close();
-  }
+  });
 }
 
 export async function deleteChunkById(db: duckdb.Database, id: string): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  await pool.withConnection(async conn => {
     await promisifyRunParams(conn, `DELETE FROM chunks WHERE id = ?`, [id]);
-  } finally {
-    conn.close();
-  }
+  });
 }
 
 export async function deleteChunksByUrl(db: duckdb.Database, url: string): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  await pool.withConnection(async conn => {
     await promisifyRunParams(conn, `DELETE FROM chunks WHERE url = ?`, [url]);
-  } finally {
-    conn.close();
-  }
+  });
 }

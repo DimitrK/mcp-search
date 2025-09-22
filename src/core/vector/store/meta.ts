@@ -1,14 +1,15 @@
 import duckdb from 'duckdb';
 import { DatabaseError } from '../../../mcp/errors';
-import { promisifyAll, promisifyConnect, promisifyRunParams, promisifyRun } from './connection';
+import { promisifyAll, promisifyRunParams, promisifyRun } from './connection';
+import { getPool } from './pool';
 
 export async function ensureEmbeddingConfig(
-  db: duckdb.Database,
+  _db: duckdb.Database,
   modelName: string,
   dimension: number
 ): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+  const pool = await getPool();
+  await pool.withConnection(async conn => {
     const modelRows = await promisifyAll<{ value: string }>(
       conn,
       `SELECT value FROM meta WHERE key='embedding_model'`
@@ -40,16 +41,12 @@ export async function ensureEmbeddingConfig(
         String(dimension),
       ]);
     }
-  } finally {
-    conn.close();
-  }
+  });
 }
 
-export async function clearEmbeddingConfig(db: duckdb.Database): Promise<void> {
-  const conn = await promisifyConnect(db);
-  try {
+export async function clearEmbeddingConfig(_db: duckdb.Database): Promise<void> {
+  const pool = await getPool();
+  await pool.withConnection(async conn => {
     await promisifyRun(conn, `DELETE FROM meta WHERE key IN ('embedding_model','embedding_dim')`);
-  } finally {
-    conn.close();
-  }
+  });
 }
