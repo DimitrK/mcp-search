@@ -7,7 +7,10 @@ jest.mock('undici', () => ({
   request: jest.fn(),
 }));
 
-const mockedRequest = request as jest.Mock;
+type JsonBody = { json: () => Promise<unknown> };
+type UndiciResponse = { statusCode: number; body: JsonBody };
+type UndiciRequest = (url: string, opts?: Record<string, unknown>) => Promise<UndiciResponse>;
+const mockedRequest = request as unknown as jest.MockedFunction<UndiciRequest>;
 
 describe('GoogleClient', () => {
   const { GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID } = getEnvironment();
@@ -48,7 +51,7 @@ describe('GoogleClient', () => {
     const mockResponse2 = { items: [{ title: 'Result 2' }] };
 
     mockedRequest.mockImplementation((url: string) => {
-      let body;
+      let body: unknown;
       if (url.includes('q=query1')) {
         body = mockResponse1;
       } else if (url.includes('q=query2')) {

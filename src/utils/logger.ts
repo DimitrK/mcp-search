@@ -33,7 +33,7 @@ function createLogger(): pino.Logger {
   const env = getEnvironment();
   const isDevelopment = env.NODE_ENV === 'development';
 
-  return pino({
+  return (pino as unknown as (opts: unknown) => pino.Logger)({
     name: 'mcp-search',
     level: isDevelopment ? 'debug' : 'info',
     transport: isDevelopment

@@ -133,11 +133,11 @@ web.search({ query: "TypeScript MCP", resultsPerQuery: 5 })
 
 ### Acceptance Criteria:
 
-- [ ] Can fetch HTML content from URLs
-- [ ] ETag-based caching works correctly
-- [ ] DuckDB database initializes with proper schema
-- [ ] Can store and retrieve document metadata
-- [ ] Content hashing produces consistent results
+- [x] Can fetch HTML content from URLs
+- [x] ETag-based caching works correctly
+- [x] DuckDB database initializes with proper schema
+- [x] Can store and retrieve document metadata
+- [x] Content hashing produces consistent results
 
 ### Verification:
 

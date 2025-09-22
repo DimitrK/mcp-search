@@ -10,4 +10,3 @@ export {
   type ChunkRow,
   type SimilarChunkRow,
 } from './chunks';
-export { DuckDbPool, getPool, type PoolOptions } from './pool';

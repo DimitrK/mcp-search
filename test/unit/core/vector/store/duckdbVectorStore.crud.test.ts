@@ -14,20 +14,20 @@ import {
 
 jest.mock('duckdb', () => {
   let storedDoc: any | null = null;
-  const run = jest.fn((sql: string, paramsOrCb: any, maybeCb?: any) => {
-    const hasParams = typeof paramsOrCb !== 'function';
-    const params = hasParams ? paramsOrCb : [];
-    const cb = hasParams ? maybeCb : paramsOrCb;
+  const run = jest.fn((...args: any[]) => {
+    const sql = args[0] as string;
+    const cb = args[args.length - 1] as (err: Error | null) => void;
+    const params = args.slice(1, -1);
     if (/INSERT OR REPLACE INTO documents/i.test(sql)) {
       const [url, title, etag, last_modified, last_crawled, content_hash] = params;
       storedDoc = { url, title, etag, last_modified, last_crawled, content_hash };
     }
     cb(null);
   });
-  const all = jest.fn((sql: string, paramsOrCb: any, maybeCb?: any) => {
-    const hasParams = typeof paramsOrCb !== 'function';
-    const params = hasParams ? paramsOrCb : [];
-    const cb = hasParams ? maybeCb : paramsOrCb;
+  const all = jest.fn((...args: any[]) => {
+    const sql = args[0] as string;
+    const cb = args[args.length - 1] as (err: Error | null, rows?: any[]) => void;
+    const params = args.slice(1, -1);
     if (/SELECT \* FROM documents WHERE url = \?/i.test(sql)) {
       const [url] = params;
       cb(null, storedDoc && storedDoc.url === url ? [storedDoc] : []);

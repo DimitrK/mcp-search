@@ -1,4 +1,7 @@
+/* global process */
 import { build } from 'esbuild';
+import { copyFile } from 'fs/promises';
+import * as glob from 'glob';
 
 const baseConfig = {
   bundle: true,
@@ -10,15 +13,16 @@ const baseConfig = {
   packages: 'external',
 };
 
-await Promise.all([
-  build({
-    ...baseConfig,
-    entryPoints: ['src/index.ts'],
-  }),
-  build({
-    ...baseConfig,
-    entryPoints: ['src/cli.ts'],
-  }),
-]);
+const entryPoints = glob.sync('src/**/*.ts');
 
-console.log('✅ Build completed successfully');
+await build({
+  ...baseConfig,
+  entryPoints,
+});
+
+await copyFile(
+  'src/core/vector/store/worker/db-worker.js',
+  'dist/core/vector/store/worker/db-worker.js'
+);
+
+process.stdout.write('✅ Build completed successfully\n');

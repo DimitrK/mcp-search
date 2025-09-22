@@ -57,8 +57,7 @@ describe('DuckDbPool', () => {
     const pool2 = new DuckDbPool(badDb(), { max: 1, idleTimeoutMs: 1 });
     const c2 = await pool2.acquire();
     // Simulate broken by discarding directly
-    // @ts-expect-error access private for test via any
-    (pool2 as any).discardConnection(c2);
+    (pool2 as unknown as { discardConnection: (c: unknown) => void }).discardConnection(c2);
     await new Promise(r => setTimeout(r, 10));
     const stats = pool2.getStats();
     expect(stats.closeFailures).toBeGreaterThan(0);

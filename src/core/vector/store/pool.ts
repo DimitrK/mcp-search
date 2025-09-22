@@ -121,8 +121,9 @@ export class DuckDbPool {
 
   private async createConnection(): Promise<Connection> {
     const anyDb = this.db as unknown as {
-      connect: ((cb: (err: Error | null, conn: duckdb.Connection) => void) => void) |
-        (() => duckdb.Connection);
+      connect:
+        | ((cb: (err: Error | null, conn: duckdb.Connection) => void) => void)
+        | (() => duckdb.Connection);
     };
     try {
       const maybeConn = (anyDb.connect as unknown as () => unknown).call(anyDb) as unknown;
@@ -219,7 +220,17 @@ export class DuckDbPool {
 let globalPool: DuckDbPool | null = null;
 export async function getPool(): Promise<DuckDbPool> {
   if (globalPool) return globalPool;
-  const db = await initDuckDb();
-  globalPool = new DuckDbPool(db);
+  const env = getEnvironment();
+  const mode = env.VECTOR_DB_MODE ?? 'inline';
+  if (mode === 'inline') {
+    const db = await initDuckDb();
+    globalPool = new DuckDbPool(db);
+    return globalPool;
+  }
+  // thread/process use the same client API over worker
+  // We still initialize DB schema in the worker. Ensure worker spins up via first call.
+  // Use acquire timeout from env
+  const { WorkerDuckDbPool } = await import('./workerPool');
+  globalPool = new WorkerDuckDbPool(env.REQUEST_TIMEOUT_MS) as unknown as DuckDbPool;
   return globalPool;
 }

@@ -4,14 +4,14 @@ import { fetchUrl } from '../../../../src/core/content/httpContentFetcher';
 import { clearEnvironmentCache } from '../../../../src/config/environment';
 
 jest.mock('undici', () => ({ request: jest.fn() as unknown }));
-const mockedRequest = request as unknown as jest.Mock<
-  Promise<{
-    statusCode: number;
-    headers: Record<string, unknown>;
-    body: { text: () => Promise<string> };
-  }>,
-  [string, Record<string, unknown>]
->;
+type UndiciTextBody = { text: () => Promise<string> };
+type UndiciResponse = {
+  statusCode: number;
+  headers: Record<string, unknown>;
+  body: UndiciTextBody;
+};
+type UndiciRequest = (url: string, opts?: Record<string, unknown>) => Promise<UndiciResponse>;
+const mockedRequest = request as unknown as jest.MockedFunction<UndiciRequest>;
 
 describe('httpContentFetcher', () => {
   beforeEach(() => {
@@ -25,8 +25,11 @@ describe('httpContentFetcher', () => {
     mockedRequest.mockResolvedValue({
       statusCode: 200,
       headers: { etag: 'W/"abc"', 'last-modified': 'Mon, 01 Jan 2024 00:00:00 GMT' },
-      body: { text: () => Promise.resolve(bodyText) },
-    });
+      body: {
+        text: () => Promise.resolve(bodyText),
+        arrayBuffer: () => Promise.resolve(new TextEncoder().encode(bodyText).buffer),
+      } as unknown as UndiciTextBody,
+    } as unknown as UndiciResponse);
 
     const res = await fetchUrl('https://example.com/test');
     expect(res.statusCode).toBe(200);
@@ -39,8 +42,11 @@ describe('httpContentFetcher', () => {
     mockedRequest.mockResolvedValue({
       statusCode: 304,
       headers: {},
-      body: { text: () => Promise.resolve('') },
-    });
+      body: {
+        text: () => Promise.resolve(''),
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      } as unknown as UndiciTextBody,
+    } as unknown as UndiciResponse);
 
     const res = await fetchUrl('https://example.com/page', { etag: 'W/"abc"' });
     expect(res.notModified).toBe(true);
@@ -63,8 +69,14 @@ describe('httpContentFetcher', () => {
               }),
             5000
           );
-          // @ts-expect-error Node timer has unref in Jest env
-          if (typeof (timer as any).unref === 'function') (timer as any).unref();
+          if (
+            typeof timer === 'object' &&
+            timer !== null &&
+            'unref' in timer &&
+            typeof (timer as NodeJS.Timeout).unref === 'function'
+          ) {
+            (timer as NodeJS.Timeout).unref();
+          }
         })
     );
 
