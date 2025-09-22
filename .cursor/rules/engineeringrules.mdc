@@ -2,7 +2,9 @@
 globs: src/**/*.ts,test/**
 alwaysApply: false
 ---
+
 # Principles
+
 Be a serious software engineer. Act like one. Behave. Be responsible in your deliverables. For example changing the eslint configuration to deprive a bad error such as unused vars is not a good pattern. Changing the check of test simply to pass while the logic is flawed is not a good pattern.
 
 Always run tests, lint and build after you touched some code.
@@ -11,8 +13,9 @@ When possible use and define errors found in `src/mcp/errors.ts`
 
 ### Development Approach & Code Quality
 
-- **Clean Code Practices**: Small functions with single responsibilities, clear naming conventions, explicit return types.
+- **Clean Code Practices**: Small functions with single responsibilities, clear naming conventions, explicit return types. Keep files small and logic contained
 - **Modular Design**: Isolated modules by logic and domain responsibility; loose coupling, high cohesion.
+- **Boolean traps**: Boolean function variables should always passed in an object (such as options, config etc) inside methods instead of being distinct arguments. That allows to name what the boolean does and is clear the intent in the function call with minimal mental capacity needed. Also boolean variables should be named with `is`, `has`, `should`, `can` prefixes. Example: `myMethod(true)` vs `myMethod({shouldUpdate: true})`
 - **File Organization**: Break code into small files; folders represent domain repositories of similar components.
 - **Testability**: Design for easy unit testing; dependency injection where appropriate; mock-friendly interfaces.
 - **ESLint Configuration**:
@@ -21,6 +24,35 @@ When possible use and define errors found in `src/mcp/errors.ts`
   - Custom rules: no implicit any, no floating promises, prefer const, explicit return types on public APIs
 - **Code Structure**: Domain-driven folder structure with clear separation of concerns.
 - **TDD development**: Always write tests before submitting a response with new functionality. When refactoring always erify that tests pass and fix any failing issues.
+- **Self documented code**: Avoid writting unnecessary comments all around the codebase. If something needs to be documented is best to create descriptive function and variable names in order to convey what the code does. Not write one more comment. Keep the comments minimal and use them as a last result for a complex piece of logic if necessary. Example:
+  Instead of this:
+
+  ```js
+  class Database {
+    async close(): Promise<void> {
+      // Reject waiters
+      this.queue.splice(0).forEach(w => {
+        clearTimeout(w.timer);
+        w.reject(new Error('Pool closing'));
+      });
+    }
+  }
+  ```
+
+  Do this:
+
+  ```js
+  class Database {
+    async close(): Promise<void> {
+      const rejectWaitingInQueue = waiter => {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('Pool closing'));
+      }
+
+      this.queue.splice(0).forEach(rejectWaitingInQueue);
+    }
+  }
+  ```
 
 ### Daily Development Workflow:
 
