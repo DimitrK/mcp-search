@@ -1,6 +1,6 @@
 import duckdb from 'duckdb';
 import { DatabaseError } from '../../../mcp/errors';
-import { promisifyAll, promisifyConnect, promisifyRunParams } from './connection';
+import { promisifyAll, promisifyConnect, promisifyRunParams, promisifyRun } from './connection';
 
 export async function ensureEmbeddingConfig(
   db: duckdb.Database,
@@ -40,6 +40,15 @@ export async function ensureEmbeddingConfig(
         String(dimension),
       ]);
     }
+  } finally {
+    conn.close();
+  }
+}
+
+export async function clearEmbeddingConfig(db: duckdb.Database): Promise<void> {
+  const conn = await promisifyConnect(db);
+  try {
+    await promisifyRun(conn, `DELETE FROM meta WHERE key IN ('embedding_model','embedding_dim')`);
   } finally {
     conn.close();
   }

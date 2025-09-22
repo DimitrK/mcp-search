@@ -60,3 +60,21 @@ export async function similaritySearch(
     conn.close();
   }
 }
+
+export async function deleteChunkById(db: duckdb.Database, id: string): Promise<void> {
+  const conn = await promisifyConnect(db);
+  try {
+    await promisifyRunParams(conn, `DELETE FROM chunks WHERE id = ?`, [id]);
+  } finally {
+    conn.close();
+  }
+}
+
+export async function deleteChunksByUrl(db: duckdb.Database, url: string): Promise<void> {
+  const conn = await promisifyConnect(db);
+  try {
+    await promisifyRunParams(conn, `DELETE FROM chunks WHERE url = ?`, [url]);
+  } finally {
+    conn.close();
+  }
+}

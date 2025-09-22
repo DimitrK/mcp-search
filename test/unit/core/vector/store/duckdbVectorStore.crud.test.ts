@@ -5,8 +5,11 @@ import {
   ensureEmbeddingConfig,
   upsertDocument,
   getDocument,
+  deleteDocument,
   upsertChunks,
   similaritySearch,
+  deleteChunkById,
+  deleteChunksByUrl,
 } from '../../../../../src/core/vector/store/duckdbVectorStore';
 
 jest.mock('duckdb', () => {
@@ -62,6 +65,11 @@ describe('duckdbVectorStore CRUD', () => {
     expect(doc?.url).toBe('https://ex');
   });
 
+  test('deleteDocument deletes document and chunks by url', async () => {
+    const db = await initDuckDb();
+    await expect(deleteDocument(db, 'https://ex')).resolves.not.toThrow();
+  });
+
   test('upsertChunks executes without error', async () => {
     const db = await initDuckDb();
     await expect(
@@ -76,6 +84,12 @@ describe('duckdbVectorStore CRUD', () => {
         },
       ])
     ).resolves.not.toThrow();
+  });
+
+  test('deleteChunkById and deleteChunksByUrl execute without error', async () => {
+    const db = await initDuckDb();
+    await expect(deleteChunkById(db, 'id1')).resolves.not.toThrow();
+    await expect(deleteChunksByUrl(db, 'https://ex')).resolves.not.toThrow();
   });
 
   test('similaritySearch executes select with VSS operator', async () => {

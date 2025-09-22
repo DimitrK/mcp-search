@@ -41,3 +41,13 @@ export async function getDocument(db: duckdb.Database, url: string): Promise<Doc
     conn.close();
   }
 }
+
+export async function deleteDocument(db: duckdb.Database, url: string): Promise<void> {
+  const conn = await promisifyConnect(db);
+  try {
+    await promisifyRunParams(conn, `DELETE FROM documents WHERE url = ?`, [url]);
+    await promisifyRunParams(conn, `DELETE FROM chunks WHERE url = ?`, [url]);
+  } finally {
+    conn.close();
+  }
+}
