@@ -53,8 +53,8 @@ describe('httpContentFetcher', () => {
   test('times out according to REQUEST_TIMEOUT_MS', async () => {
     mockedRequest.mockImplementation(
       () =>
-        new Promise(resolve =>
-          setTimeout(
+        new Promise(resolve => {
+          const timer = setTimeout(
             () =>
               resolve({
                 statusCode: 200,
@@ -62,8 +62,10 @@ describe('httpContentFetcher', () => {
                 body: { text: () => Promise.resolve('late') },
               }),
             5000
-          )
-        )
+          );
+          // @ts-expect-error Node timer has unref in Jest env
+          if (typeof (timer as any).unref === 'function') (timer as any).unref();
+        })
     );
 
     await expect(fetchUrl('https://example.com/slow', { timeoutMs: 50 })).rejects.toThrow(
