@@ -5,6 +5,7 @@ import { TimeoutError, NetworkError } from '../../mcp/errors';
 export interface FetchOptions {
   etag?: string;
   timeoutMs?: number;
+  lastModified?: string;
 }
 
 export interface FetchResult {
@@ -31,6 +32,7 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
     'accept-encoding': 'gzip, br',
   };
   if (options.etag) headers['if-none-match'] = options.etag;
+  if (options.lastModified) headers['if-modified-since'] = options.lastModified;
 
   try {
     const requestPromise = request(url, {
