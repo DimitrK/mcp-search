@@ -23,10 +23,10 @@ When possible use and define errors found in `src/mcp/errors.ts`
   - `plugin:prettier/recommended`
   - Custom rules: no implicit any, no floating promises, prefer const, explicit return types on public APIs
 - **Code Structure**: Domain-driven folder structure with clear separation of concerns.
+- **Vestigial Parameters**:  Do not leave any vestigial parameters; If a parameter is required by the exported API signatures but not functionally used anywhere in the code simply remove it and refactor. Keep only actual usable code.
 - **TDD development**: Always write tests before submitting a response with new functionality. When refactoring always erify that tests pass and fix any failing issues.
 - **Self documented code**: Avoid writting unnecessary comments all around the codebase. If something needs to be documented is best to create descriptive function and variable names in order to convey what the code does. Not write one more comment. Keep the comments minimal and use them as a last result for a complex piece of logic if necessary. Example:
   Instead of this:
-
   ```js
   class Database {
     async close(): Promise<void> {
