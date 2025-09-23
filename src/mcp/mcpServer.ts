@@ -3,7 +3,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { APP_NAME, APP_VERSION, MCP_TOOL_DESCRIPTIONS } from '../config/constants';
-import { generateCorrelationId, createChildLogger } from '../utils/logger';
+import { generateCorrelationId, createChildLogger, withTiming } from '../utils/logger';
 import { handleMcpError, ValidationError } from './errors';
 import { SearchInput, ReadFromPageInput, DebugEchoInput } from './schemas';
 import { handleWebSearch, handleReadFromPage, handleDebugEcho } from '../handlers/index';
@@ -59,13 +59,19 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async request => {
 
     switch (request.params.name) {
       case 'web.search':
-        return await handleWebSearch(request.params.arguments, childLogger);
+        return await withTiming(childLogger, 'tool:web.search', async () =>
+          handleWebSearch(request.params.arguments, childLogger)
+        );
 
       case 'web.readFromPage':
-        return await handleReadFromPage(request.params.arguments, childLogger);
+        return await withTiming(childLogger, 'tool:web.readFromPage', async () =>
+          handleReadFromPage(request.params.arguments, childLogger)
+        );
 
       case 'debug.echo':
-        return await handleDebugEcho(request.params.arguments, childLogger);
+        return await withTiming(childLogger, 'tool:debug.echo', async () =>
+          handleDebugEcho(request.params.arguments, childLogger)
+        );
 
       default:
         throw new ValidationError(`Unknown tool: ${request.params.name}`);

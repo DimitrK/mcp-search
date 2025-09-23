@@ -83,3 +83,20 @@ export function createChildLogger(correlationId: string): pino.Logger {
 export function generateCorrelationId(): string {
   return `mcp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
+
+export async function withTiming<T>(
+  log: pino.Logger,
+  event: string,
+  fn: () => Promise<T>,
+  fields?: Record<string, unknown>
+): Promise<T> {
+  const start = Date.now();
+  try {
+    const result = await fn();
+    log.info({ event, durationMs: Date.now() - start, status: 'ok', ...(fields ?? {}) });
+    return result;
+  } catch (error) {
+    log.error({ event, durationMs: Date.now() - start, error, ...(fields ?? {}) }, 'failed');
+    throw error as Error;
+  }
+}

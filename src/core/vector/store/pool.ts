@@ -218,7 +218,7 @@ export class DuckDbPool {
 }
 
 let globalPool: DuckDbPool | null = null;
-export async function getPool(): Promise<DuckDbPool> {
+export async function getPool(opts?: { correlationId?: string }): Promise<DuckDbPool> {
   if (globalPool) return globalPool;
   const env = getEnvironment();
   const mode = env.VECTOR_DB_MODE ?? 'inline';
@@ -230,6 +230,9 @@ export async function getPool(): Promise<DuckDbPool> {
   // thread/process: use the same client API via worker. Inline never reaches the worker client.
   // DB is initialized inside the worker on first message; parent should not open the DB.
   const { WorkerDuckDbPool } = await import('./workerPool');
-  globalPool = new WorkerDuckDbPool(env.REQUEST_TIMEOUT_MS) as unknown as DuckDbPool;
-  return globalPool;
+  const worker = new WorkerDuckDbPool(env.REQUEST_TIMEOUT_MS, undefined, {
+    correlationId: opts?.correlationId,
+  }) as unknown as DuckDbPool;
+  globalPool = worker;
+  return worker;
 }

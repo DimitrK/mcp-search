@@ -2,6 +2,7 @@ import { request } from 'undici';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import type pino from 'pino';
 import { getEnvironment } from '../../config/environment';
+import { withTiming } from '../../utils/logger';
 
 const GOOGLE_API_BASE_URL = 'https://www.googleapis.com';
 
@@ -151,10 +152,17 @@ export class GoogleClient {
     const searchPromises = queries.map(q => this.singleSearch(q, options?.resultsPerQuery));
 
     // Simple concurrency limiting for now
-    const results = [];
+    const results: Array<{ query: string; result: unknown }> = [];
     for (let i = 0; i < searchPromises.length; i += this.concurrency) {
       const batch = searchPromises.slice(i, i + this.concurrency);
-      results.push(...(await Promise.all(batch)));
+      const batchNumber = Math.floor(i / this.concurrency) + 1;
+      const batchResults = await withTiming(
+        this.logger ?? (console as unknown as pino.Logger),
+        'google.search.batch',
+        async () => Promise.all(batch),
+        { batchNumber, batchSize: batch.length }
+      );
+      results.push(...batchResults);
     }
 
     const aggregated = { queries: results };

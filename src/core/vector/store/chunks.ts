@@ -1,4 +1,6 @@
 import { promisifyRunParams, promisifyAll } from './connection';
+import type pino from 'pino';
+import { createChildLogger, withTiming } from '../../../utils/logger';
 import { getPool } from './pool';
 
 export interface ChunkRow {
@@ -17,18 +19,24 @@ export interface SimilarChunkRow {
   score: number;
 }
 
-export async function upsertChunks(chunks: ChunkRow[]): Promise<void> {
-  const pool = await getPool();
-  await pool.runInTransaction(async conn => {
-    for (const c of chunks) {
-      await promisifyRunParams(
-        conn,
-        `INSERT OR REPLACE INTO chunks(id, url, section_path, text, tokens, embedding)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [c.id, c.url, c.section_path ?? null, c.text, c.tokens, c.embedding]
-      );
-    }
-  });
+export async function upsertChunks(
+  chunks: ChunkRow[],
+  opts?: { correlationId?: string }
+): Promise<void> {
+  const log = opts?.correlationId ? createChildLogger(opts.correlationId) : undefined;
+  const pool = await getPool(opts);
+  await withTiming(log ?? (console as unknown as pino.Logger), 'db.upsertChunks', async () =>
+    pool.runInTransaction(async conn => {
+      for (const c of chunks) {
+        await promisifyRunParams(
+          conn,
+          `INSERT OR REPLACE INTO chunks(id, url, section_path, text, tokens, embedding)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [c.id, c.url, c.section_path ?? null, c.text, c.tokens, c.embedding]
+        );
+      }
+    })
+  );
 }
 
 export async function similaritySearch(

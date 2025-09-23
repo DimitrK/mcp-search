@@ -1,6 +1,7 @@
 import { request } from 'undici';
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'zlib';
 import { getEnvironment } from '../../config/environment';
+import { withTiming, createChildLogger, generateCorrelationId } from '../../utils/logger';
 import { TimeoutError, NetworkError } from '../../mcp/errors';
 
 export interface FetchOptions {
@@ -36,6 +37,8 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
   if (options.lastModified) headers['if-modified-since'] = options.lastModified;
 
   try {
+    const correlationId = generateCorrelationId();
+    const log = createChildLogger(correlationId);
     const requestPromise = request(url, {
       method: 'GET',
       signal: controller.signal,
@@ -50,7 +53,9 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
       }, timeoutMs);
     });
 
-    const res = await Promise.race([requestPromise, timeoutPromise]);
+    const res = await withTiming(log, 'http.fetch', async () =>
+      Promise.race([requestPromise, timeoutPromise])
+    );
     clearTimeout(timeout);
 
     const statusCode = res.statusCode;
