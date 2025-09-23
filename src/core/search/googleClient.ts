@@ -153,16 +153,31 @@ export class GoogleClient {
 
     // Simple concurrency limiting for now
     const results: Array<{ query: string; result: unknown }> = [];
+    let lastFailure: unknown = null;
     for (let i = 0; i < searchPromises.length; i += this.concurrency) {
       const batch = searchPromises.slice(i, i + this.concurrency);
       const batchNumber = Math.floor(i / this.concurrency) + 1;
-      const batchResults = await withTiming(
+      const settled = await withTiming(
         this.logger ?? (console as unknown as pino.Logger),
         'google.search.batch',
-        async () => Promise.all(batch),
+        async () => Promise.allSettled(batch),
         { batchNumber, batchSize: batch.length }
       );
-      results.push(...batchResults);
+      for (const r of settled) {
+        if (r.status === 'fulfilled') {
+          results.push(r.value);
+        } else {
+          lastFailure = r.reason;
+          this.logger?.error(
+            { batchNumber, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+            'Google search request failed'
+          );
+        }
+      }
+    }
+
+    if (results.length === 0 && lastFailure) {
+      throw lastFailure instanceof Error ? lastFailure : new Error(String(lastFailure));
     }
 
     const aggregated = { queries: results };

@@ -72,6 +72,45 @@ describe('GoogleClient', () => {
     expect(mockedRequest).toHaveBeenCalledTimes(2);
   });
 
+  test('should return partial results when some queries fail', async () => {
+    const queries = ['ok', 'fail'];
+    const okResponse = { items: [{ title: 'OK' }] };
+
+    mockedRequest.mockImplementation((url: string) => {
+      if (url.includes('q=ok')) {
+        return Promise.resolve({
+          statusCode: 200,
+          body: { json: () => Promise.resolve(okResponse) },
+        });
+      }
+      if (url.includes('q=fail')) {
+        return Promise.resolve({
+          statusCode: 500,
+          body: { json: () => Promise.resolve({ error: { message: 'Internal Server Error' } }) },
+        });
+      }
+      return Promise.resolve({ statusCode: 200, body: { json: () => Promise.resolve({}) } });
+    });
+
+    const result = await googleClient.search(queries);
+    expect(result.queries).toHaveLength(1);
+    expect(result.queries[0].query).toBe('ok');
+    expect(result.queries[0].result).toEqual(okResponse);
+  });
+
+  test('should throw when all queries fail', async () => {
+    const queries = ['f1', 'f2'];
+
+    mockedRequest.mockResolvedValue({
+      statusCode: 500,
+      body: { json: () => Promise.resolve({ error: { message: 'Internal Server Error' } }) },
+    });
+
+    await expect(googleClient.search(queries)).rejects.toThrow(
+      'Google API request failed with status 500: Internal Server Error'
+    );
+  });
+
   test('should throw an error for API failures', async () => {
     const query = 'failing query';
     const errorResponse = { error: { message: 'Internal Server Error' } };
