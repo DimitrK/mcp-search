@@ -1,4 +1,8 @@
-import { dbAll, dbRun, closeDb } from './worker/db-client';
+import {
+  dbAll as defaultDbAll,
+  dbRun as defaultDbRun,
+  closeDb as defaultCloseDb,
+} from './worker/db-client';
 
 type AnyFn = (sql: string, ...args: unknown[]) => void;
 interface WorkerConnShape {
@@ -22,19 +26,25 @@ function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
   });
 }
 
-function makeFakeConnection(timeoutMs: number): WorkerConnShape {
+type DbOps = {
+  dbRun: (sql: string, params?: unknown[]) => Promise<void>;
+  dbAll: (sql: string, params?: unknown[]) => Promise<unknown[]>;
+  closeDb: () => Promise<void>;
+};
+
+function makeFakeConnection(timeoutMs: number, ops: DbOps): WorkerConnShape {
   return {
     run(sql: string, ...args: unknown[]): void {
       const cb = args[args.length - 1] as Callback;
       const params = args.slice(0, -1) as unknown[];
-      withTimeout(dbRun(sql, params), timeoutMs)
+      withTimeout(ops.dbRun(sql, params), timeoutMs)
         .then(() => cb(null))
         .catch((e: Error) => cb(e));
     },
     all(sql: string, ...args: unknown[]) {
       const cb = args[args.length - 1] as Callback;
       const params = args.slice(0, -1) as unknown[];
-      withTimeout(dbAll(sql, params), timeoutMs)
+      withTimeout(ops.dbAll(sql, params), timeoutMs)
         .then(rows => cb(null, rows))
         .catch((e: Error) => cb(e));
     },
@@ -46,10 +56,17 @@ export class WorkerDuckDbPool {
   private stats = { total: 1, idle: 0, queueLength: 0, closeFailures: 0, max: 1 };
   private readonly conn: WorkerConnShape;
   private readonly acquireTimeoutMs: number;
+  private readonly ops: DbOps;
 
-  constructor(acquireTimeoutMs: number) {
+  constructor(acquireTimeoutMs: number, overrides?: Partial<DbOps>) {
     this.acquireTimeoutMs = acquireTimeoutMs;
-    this.conn = makeFakeConnection(this.acquireTimeoutMs);
+    this.ops = {
+      dbRun: defaultDbRun,
+      dbAll: defaultDbAll,
+      closeDb: defaultCloseDb,
+      ...overrides,
+    };
+    this.conn = makeFakeConnection(this.acquireTimeoutMs, this.ops);
   }
 
   async acquire(): Promise<WorkerConnShape> {
@@ -72,7 +89,7 @@ export class WorkerDuckDbPool {
   }
 
   async close(): Promise<void> {
-    await closeDb();
+    await this.ops.closeDb();
   }
 
   getStats() {
