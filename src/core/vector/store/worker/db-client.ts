@@ -1,8 +1,9 @@
 import { Worker } from 'worker_threads';
-import { fork, ChildProcess } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { getDatabasePath, getEnvironment } from '../../../../config/environment';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,19 +32,37 @@ type MinimalMessenger = {
   send?: (msg: WorkerEnvelope) => boolean;
 };
 
+function resolveWorkerPath() {
+  const override = process.env.VECTOR_DB_WORKER_PATH;
+  if (override && existsSync(override)) return override;
+
+  const localJs = join(__dirname, 'db-worker.js');
+  if (existsSync(localJs)) return localJs;
+  const distJs = join(process.cwd(), 'dist', 'core', 'vector', 'store', 'worker', 'db-worker.js');
+  if (existsSync(distJs)) return distJs;
+
+  throw new Error('Worker path not found');
+}
+
+// getWorker: Only used for non-inline modes. Inline mode never reaches this module.
 function getWorker() {
   if (worker) return worker;
 
-  const workerPath = join(__dirname, 'db-worker.js');
-  const dbPath = getDatabasePath();
-
   const env = getEnvironment();
-  const mode = env.VECTOR_DB_MODE ?? 'inline';
+  const executionMode = env.VECTOR_DB_MODE ?? 'thread';
+  const dbPath = getDatabasePath();
+  const workerPath = resolveWorkerPath();
 
-  if (mode === 'process') {
-    const cp = fork(workerPath, [], {
+  if (executionMode === 'process') {
+    const debugProc = (process.env.VECTOR_DB_PROCESS_DEBUG ?? '0').toLowerCase() === '1';
+    const stdio = debugProc
+      ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
+      : (['ignore', 'pipe', 'pipe', 'ipc'] as const);
+    const cp = spawn(process.execPath, [workerPath], {
       env: { ...process.env, DB_PATH: dbPath },
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      stdio: stdio as unknown as
+        | ['ignore', 'inherit', 'inherit', 'ipc']
+        | ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     worker = cp;
     cp.on('message', (msg: WorkerMessage) => {
@@ -56,6 +75,10 @@ function getWorker() {
         inflight.delete(id);
       }
     });
+    if (!debugProc) {
+      cp.stdout?.on('data', d => process.stderr.write(`[db-proc][out] ${d}`));
+      cp.stderr?.on('data', d => process.stderr.write(`[db-proc][err] ${d}`));
+    }
     cp.on('exit', code => {
       if (code !== 0) {
         console.error(`DB process worker stopped with exit code ${code}`);

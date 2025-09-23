@@ -1,4 +1,3 @@
-import duckdb from 'duckdb';
 import { promisifyRunParams, promisifyAll } from './connection';
 import { getPool } from './pool';
 
@@ -18,7 +17,7 @@ export interface SimilarChunkRow {
   score: number;
 }
 
-export async function upsertChunks(db: duckdb.Database, chunks: ChunkRow[]): Promise<void> {
+export async function upsertChunks(chunks: ChunkRow[]): Promise<void> {
   const pool = await getPool();
   await pool.runInTransaction(async conn => {
     for (const c of chunks) {
@@ -33,7 +32,6 @@ export async function upsertChunks(db: duckdb.Database, chunks: ChunkRow[]): Pro
 }
 
 export async function similaritySearch(
-  db: duckdb.Database,
   url: string,
   embedding: number[],
   limit: number,
@@ -53,14 +51,14 @@ export async function similaritySearch(
   });
 }
 
-export async function deleteChunkById(db: duckdb.Database, id: string): Promise<void> {
+export async function deleteChunkById(id: string): Promise<void> {
   const pool = await getPool();
   await pool.withConnection(async conn => {
     await promisifyRunParams(conn, `DELETE FROM chunks WHERE id = ?`, [id]);
   });
 }
 
-export async function deleteChunksByUrl(db: duckdb.Database, url: string): Promise<void> {
+export async function deleteChunksByUrl(url: string): Promise<void> {
   const pool = await getPool();
   await pool.withConnection(async conn => {
     await promisifyRunParams(conn, `DELETE FROM chunks WHERE url = ?`, [url]);

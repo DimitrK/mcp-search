@@ -1,7 +1,5 @@
-import { describe, test, expect, beforeAll, jest } from '@jest/globals';
-import duckdb from 'duckdb';
+import { describe, test, expect, jest } from '@jest/globals';
 import {
-  initDuckDb,
   ensureEmbeddingConfig,
   upsertDocument,
   getDocument,
@@ -47,39 +45,34 @@ jest.mock('duckdb', () => {
 
 describe('duckdbVectorStore CRUD', () => {
   test('ensureEmbeddingConfig inserts model/dim if missing', async () => {
-    const db = await initDuckDb();
-    await expect(ensureEmbeddingConfig(db, 'text-embedding-3-small', 1536)).resolves.not.toThrow();
+    await expect(ensureEmbeddingConfig('text-embedding-3-small', 1536)).resolves.not.toThrow();
   });
 
   test('upsert/get document works', async () => {
-    const db = await initDuckDb();
-    await upsertDocument(db, {
+    await upsertDocument({
       url: 'https://ex',
       title: 't',
       etag: 'e',
-      last_modified: 'm',
+      last_modified: 'l',
       last_crawled: 'c',
       content_hash: 'h',
     });
-    const doc = await getDocument(db, 'https://ex');
+    const doc = await getDocument('https://ex');
     expect(doc?.url).toBe('https://ex');
   });
 
   test('deleteDocument deletes document and chunks by url', async () => {
-    const db = await initDuckDb();
-    await expect(deleteDocument(db, 'https://ex')).resolves.not.toThrow();
+    await expect(deleteDocument('https://ex')).resolves.not.toThrow();
   });
 
   test('upsertChunks executes without error', async () => {
-    const db = await initDuckDb();
     await expect(
-      upsertChunks(db, [
+      upsertChunks([
         {
-          id: 'id1',
+          id: '1',
           url: 'https://ex',
-          section_path: 'h1/p[0]',
-          text: 'hello',
-          tokens: 5,
+          text: 't',
+          tokens: 10,
           embedding: new Array(1536).fill(0),
         },
       ])
@@ -87,14 +80,12 @@ describe('duckdbVectorStore CRUD', () => {
   });
 
   test('deleteChunkById and deleteChunksByUrl execute without error', async () => {
-    const db = await initDuckDb();
-    await expect(deleteChunkById(db, 'id1')).resolves.not.toThrow();
-    await expect(deleteChunksByUrl(db, 'https://ex')).resolves.not.toThrow();
+    await expect(deleteChunkById('id1')).resolves.not.toThrow();
+    await expect(deleteChunksByUrl('https://ex')).resolves.not.toThrow();
   });
 
   test('similaritySearch executes select with VSS operator', async () => {
-    const db = await initDuckDb();
-    const results = await similaritySearch(db, 'https://ex', new Array(1536).fill(0), 5);
+    const results = await similaritySearch('https://ex', new Array(1536).fill(0), 5);
     expect(Array.isArray(results)).toBe(true);
   });
 });

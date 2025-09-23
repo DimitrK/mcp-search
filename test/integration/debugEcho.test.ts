@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 import { McpSearchServer } from '../../src/server';
-import { DebugEchoInputType, DebugEchoOutputType } from '../../src/mcp/schemas';
+import { DebugEchoInputType } from '../../src/mcp/schemas';
 
 describe('Debug Echo Tool Integration', () => {
   let server: McpSearchServer;

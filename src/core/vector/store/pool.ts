@@ -227,9 +227,8 @@ export async function getPool(): Promise<DuckDbPool> {
     globalPool = new DuckDbPool(db);
     return globalPool;
   }
-  // thread/process use the same client API over worker
-  // We still initialize DB schema in the worker. Ensure worker spins up via first call.
-  // Use acquire timeout from env
+  // thread/process: use the same client API via worker. Inline never reaches the worker client.
+  // DB is initialized inside the worker on first message; parent should not open the DB.
   const { WorkerDuckDbPool } = await import('./workerPool');
   globalPool = new WorkerDuckDbPool(env.REQUEST_TIMEOUT_MS) as unknown as DuckDbPool;
   return globalPool;

@@ -1,4 +1,3 @@
-import duckdb from 'duckdb';
 import { promisifyRunParams, promisifyAll } from './connection';
 import { getPool } from './pool';
 
@@ -11,7 +10,7 @@ export interface DocumentRow {
   content_hash?: string;
 }
 
-export async function upsertDocument(db: duckdb.Database, doc: DocumentRow): Promise<void> {
+export async function upsertDocument(doc: DocumentRow): Promise<void> {
   const pool = await getPool();
   await pool.withConnection(async conn => {
     await promisifyRunParams(
@@ -29,7 +28,7 @@ export async function upsertDocument(db: duckdb.Database, doc: DocumentRow): Pro
     );
   });
 }
-export async function getDocument(db: duckdb.Database, url: string): Promise<DocumentRow | null> {
+export async function getDocument(url: string): Promise<DocumentRow | null> {
   const pool = await getPool();
   return await pool.withConnection(async conn => {
     const rows = await promisifyAll<DocumentRow>(conn, `SELECT * FROM documents WHERE url = ?`, [
@@ -39,7 +38,7 @@ export async function getDocument(db: duckdb.Database, url: string): Promise<Doc
   });
 }
 
-export async function deleteDocument(db: duckdb.Database, url: string): Promise<void> {
+export async function deleteDocument(url: string): Promise<void> {
   const pool = await getPool();
   await pool.runInTransaction(async conn => {
     await promisifyRunParams(conn, `DELETE FROM documents WHERE url = ?`, [url]);

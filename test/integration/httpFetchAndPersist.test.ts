@@ -82,16 +82,13 @@ describe('fetchAndPersistDocument integration (200→304)', () => {
       });
     });
 
-    // @ts-expect-error minimal duckdb.Database shape for tests
-    const db = new duckdb.Database();
-
-    const r1 = await fetchAndPersistDocument(db, 'https://EXAMPLE.com/a?b=2&a=1#frag');
+    const r1 = await fetchAndPersistDocument('https://EXAMPLE.com/a?b=2&a=1#frag');
     expect(r1.statusCode).toBe(200);
     expect(r1.notModified).toBe(false);
     expect(r1.etag).toBe('W/"abc"');
     expect(typeof r1.contentHash).toBe('string');
 
-    const r2 = await fetchAndPersistDocument(db, 'https://example.com/a?a=1&b=2');
+    const r2 = await fetchAndPersistDocument('https://example.com/a?a=1&b=2');
     expect(r2.statusCode).toBe(304);
     expect(r2.notModified).toBe(true);
     expect(r2.contentHash).toBe(r1.contentHash);

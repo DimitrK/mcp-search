@@ -1,4 +1,3 @@
-import duckdb from 'duckdb';
 import { fetchUrl } from './httpContentFetcher';
 import { sha256Hex } from './hasher';
 import { normalizeUrl } from '../../utils/urlValidator';
@@ -13,12 +12,9 @@ export interface PersistResult {
   bodyText?: string;
   contentHash?: string;
 }
-export async function fetchAndPersistDocument(
-  db: duckdb.Database,
-  inputUrl: string
-): Promise<PersistResult> {
+export async function fetchAndPersistDocument(inputUrl: string): Promise<PersistResult> {
   const url = normalizeUrl(inputUrl);
-  const existing = await getDocument(db, url);
+  const existing = await getDocument(url);
 
   const res = await fetchUrl(url, {
     etag: existing?.etag,
@@ -28,7 +24,7 @@ export async function fetchAndPersistDocument(
   const nowIso = new Date().toISOString();
 
   if (res.notModified) {
-    await upsertDocument(db, {
+    await upsertDocument({
       url,
       title: existing?.title,
       etag: existing?.etag,
@@ -49,7 +45,7 @@ export async function fetchAndPersistDocument(
   const bodyText = res.bodyText;
   const contentHash = sha256Hex(bodyText);
 
-  await upsertDocument(db, {
+  await upsertDocument({
     url,
     title: existing?.title,
     etag: res.etag ?? existing?.etag,
