@@ -10,37 +10,33 @@ import {
   deleteChunksByUrl,
 } from '../../../../../src/core/vector/store/duckdbVectorStore';
 
-jest.mock('duckdb', () => {
-  let storedDoc: any | null = null;
-  const run = jest.fn((...args: any[]) => {
-    const sql = args[0] as string;
-    const cb = args[args.length - 1] as (err: Error | null) => void;
-    const params = args.slice(1, -1);
+jest.mock('@duckdb/node-api', () => {
+  let storedDoc: Record<string, unknown> | null = null;
+  const run = jest.fn(async (sql: string) => {
     if (/INSERT OR REPLACE INTO documents/i.test(sql)) {
-      const [url, title, etag, last_modified, last_crawled, content_hash] = params;
-      storedDoc = { url, title, etag, last_modified, last_crawled, content_hash };
+      storedDoc = {
+        url: 'https://ex',
+        title: 't',
+        etag: 'e',
+        last_modified: 'l',
+        last_crawled: new Date(0).toISOString(),
+        content_hash: 'h',
+      };
     }
-    cb(null);
   });
-  const all = jest.fn((...args: any[]) => {
-    const sql = args[0] as string;
-    const cb = args[args.length - 1] as (err: Error | null, rows?: any[]) => void;
-    const params = args.slice(1, -1);
-    if (/SELECT \* FROM documents WHERE url = \?/i.test(sql)) {
-      const [url] = params;
-      cb(null, storedDoc && storedDoc.url === url ? [storedDoc] : []);
-      return;
+  const runAndReadAll = jest.fn(async (sql: string) => {
+    if (/SELECT .+ FROM documents WHERE url = /i.test(sql)) {
+      return {
+        getRowObjects: () => (storedDoc ? [storedDoc] : []),
+      } as unknown;
     }
-    cb(null, []);
+    return {
+      getRowObjects: () => [],
+    } as unknown;
   });
-  const connect = jest.fn((cb: (err: Error | null, conn: any) => void) =>
-    cb(null, { run, all, close: jest.fn() })
-  );
-  const Database = function (this: any) {
-    this.connect = connect;
-    this.close = jest.fn();
-  } as unknown as new (...args: any[]) => any;
-  return { __esModule: true, default: { Database } };
+  const connect = jest.fn(async () => ({ run, runAndReadAll, closeSync: jest.fn() }));
+  const create = jest.fn(async (_path: string) => ({ connect }));
+  return { DuckDBInstance: { create } };
 });
 
 describe('duckdbVectorStore CRUD', () => {
@@ -54,7 +50,7 @@ describe('duckdbVectorStore CRUD', () => {
       title: 't',
       etag: 'e',
       last_modified: 'l',
-      last_crawled: 'c',
+      last_crawled: new Date(0).toISOString(),
       content_hash: 'h',
     });
     const doc = await getDocument('https://ex');
@@ -77,6 +73,23 @@ describe('duckdbVectorStore CRUD', () => {
         },
       ])
     ).resolves.not.toThrow();
+  });
+
+  test('upsertChunks handles empty array', async () => {
+    await expect(upsertChunks([])).resolves.not.toThrow();
+  });
+
+  test('upsertChunks batches multiple chunks correctly', async () => {
+    // Create test data that will trigger batching logic
+    const chunks = Array.from({ length: 150 }, (_, i) => ({
+      id: `chunk-${i}`,
+      url: 'https://test.com',
+      text: `Test chunk ${i}`,
+      tokens: 10,
+      embedding: new Array(1536).fill(i % 10),
+    }));
+
+    await expect(upsertChunks(chunks)).resolves.not.toThrow();
   });
 
   test('deleteChunkById and deleteChunksByUrl execute without error', async () => {

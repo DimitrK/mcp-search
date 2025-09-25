@@ -23,17 +23,40 @@ export async function upsertChunks(
   chunks: ChunkRow[],
   opts?: { correlationId?: string }
 ): Promise<void> {
+  if (chunks.length === 0) return;
+
   const log = opts?.correlationId ? createChildLogger(opts.correlationId) : undefined;
   const pool = await getPool(opts);
   await withTiming(log ?? (console as unknown as pino.Logger), 'db.upsertChunks', async () =>
     pool.runInTransaction(async conn => {
-      for (const c of chunks) {
-        await promisifyRunParams(
-          conn,
-          `INSERT OR REPLACE INTO chunks(id, url, section_path, text, tokens, embedding)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [c.id, c.url, c.section_path ?? null, c.text, c.tokens, c.embedding]
-        );
+      // Use batch insert with multiple VALUES for much better performance
+      const batchSize = 100; // Process in batches to avoid parameter limits
+
+      for (let i = 0; i < chunks.length; i += batchSize) {
+        const batch = chunks.slice(i, i + batchSize);
+
+        // Build multi-row VALUES clause with positional parameters
+        const valuesClauses = batch
+          .map((_, idx) => {
+            const base = idx * 6;
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}::FLOAT[1536])`;
+          })
+          .join(', ');
+
+        const sql = `INSERT OR REPLACE INTO chunks(id, url, section_path, text, tokens, embedding)
+                     VALUES ${valuesClauses}`;
+
+        // Flatten all parameters for this batch
+        const params = batch.flatMap(c => [
+          c.id,
+          c.url,
+          c.section_path ?? null,
+          c.text,
+          c.tokens,
+          c.embedding,
+        ]);
+
+        await promisifyRunParams(conn, sql, params);
       }
     })
   );
@@ -47,14 +70,14 @@ export async function similaritySearch(
 ): Promise<SimilarChunkRow[]> {
   const pool = await getPool();
   return await pool.withConnection(async conn => {
-    const cast = `?::FLOAT[${dimension}]`;
+    // Use positional parameters for cleaner SQL
     const sql = `SELECT id, text, section_path,
-       1 - (embedding <=> ${cast}) AS score
+       1 - (embedding <=> $1::FLOAT[${dimension}]) AS score
      FROM chunks
-     WHERE url = ?
-     ORDER BY embedding <-> ${cast}
-     LIMIT ?`;
-    const rows = await promisifyAll<SimilarChunkRow>(conn, sql, [embedding, url, embedding, limit]);
+     WHERE url = $2
+     ORDER BY embedding <-> $1::FLOAT[${dimension}]
+     LIMIT $3`;
+    const rows = await promisifyAll<SimilarChunkRow>(conn, sql, [embedding, url, limit]);
     return rows;
   });
 }

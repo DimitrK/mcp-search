@@ -1,10 +1,37 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { request } from 'undici';
-import duckdb from 'duckdb';
 import { fetchAndPersistDocument } from '../../src/core/content/httpFetchAndPersist';
 import { clearEnvironmentCache } from '../../src/config/environment';
 
 jest.mock('undici', () => ({ request: jest.fn() as unknown }));
+jest.mock('@duckdb/node-api', () => {
+  let storedDoc: Record<string, unknown> | null = null;
+  const run = jest.fn(async (sql: string) => {
+    if (/INSERT OR REPLACE INTO documents/i.test(sql)) {
+      storedDoc = {
+        url: 'https://ex.com',
+        title: 'Example',
+        etag: 'e1',
+        last_modified: '2024-01-01',
+        last_crawled: '2024-01-01T00:00:00.000Z',
+        content_hash: '64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c',
+      };
+    }
+  });
+  const runAndReadAll = jest.fn(async (sql: string) => {
+    if (/SELECT .+ FROM documents WHERE url = /i.test(sql)) {
+      return {
+        getRowObjects: () => (storedDoc ? [storedDoc] : []),
+      } as unknown;
+    }
+    return {
+      getRowObjects: () => [],
+    } as unknown;
+  });
+  const connect = jest.fn(async () => ({ run, runAndReadAll, closeSync: jest.fn() }));
+  const create = jest.fn(async (_path: string) => ({ connect }));
+  return { DuckDBInstance: { create } };
+});
 type UndiciTextBody = { text: () => Promise<string> };
 type UndiciResponse = {
   statusCode: number;
@@ -14,41 +41,7 @@ type UndiciResponse = {
 type UndiciRequest = (url: string, opts?: Record<string, unknown>) => Promise<UndiciResponse>;
 const mockedRequest = request as unknown as jest.MockedFunction<UndiciRequest>;
 
-jest.mock('duckdb', () => {
-  let storedDoc: any | null = null;
-  const run = jest.fn((...args: unknown[]) => {
-    const sql = args[0] as string;
-    const cb = args[args.length - 1] as (err: Error | null) => void;
-    const params = args.slice(1, -1);
-    if (/INSERT OR REPLACE INTO documents/i.test(sql)) {
-      const [url, title, etag, last_modified, last_crawled, content_hash] = params;
-      storedDoc = { url, title, etag, last_modified, last_crawled, content_hash };
-    }
-    if (/DELETE FROM meta|CREATE TABLE|CREATE INDEX|INSTALL vss|LOAD vss/i.test(sql)) {
-      // schema ops: succeed silently
-    }
-    cb(null);
-  });
-  const all = jest.fn((...args: unknown[]) => {
-    const sql = args[0] as string;
-    const cb = args[args.length - 1] as (err: Error | null, rows?: any[]) => void;
-    const params = args.slice(1, -1);
-    if (/SELECT \* FROM documents WHERE url = \?/i.test(sql)) {
-      const [url] = params;
-      cb(null, storedDoc && storedDoc.url === url ? [storedDoc] : []);
-      return;
-    }
-    cb(null, []);
-  });
-  const connect = jest.fn((cb: (err: Error | null, conn: any) => void) =>
-    cb(null, { run, all, close: jest.fn() })
-  );
-  const Database = function (this: any) {
-    this.connect = connect;
-    this.close = jest.fn();
-  } as unknown as new (...args: any[]) => any;
-  return { __esModule: true, default: { Database } };
-});
+// No DB mocking: use real @duckdb/node-api via connection adapter
 
 describe('fetchAndPersistDocument integration (200→304)', () => {
   beforeEach(() => {

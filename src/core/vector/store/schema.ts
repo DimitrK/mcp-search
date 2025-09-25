@@ -1,7 +1,6 @@
-import duckdb from 'duckdb';
-import { promisifyConnect, promisifyRun } from './connection';
+import { promisifyConnect, promisifyRun, DuckDbDatabaseLike } from './connection';
 
-export async function runSchema(db: duckdb.Database): Promise<void> {
+export async function runSchema(db: DuckDbDatabaseLike): Promise<void> {
   const conn = await promisifyConnect(db);
   try {
     const skipVss =
@@ -10,14 +9,16 @@ export async function runSchema(db: duckdb.Database): Promise<void> {
 
     if (!skipVss) {
       try {
+        // Install and load VSS extension (allow_unsigned_extensions set during instance creation)
         await promisifyRun(conn, `INSTALL vss;`);
-      } catch {
-        // ignore
-      }
-      try {
         await promisifyRun(conn, `LOAD vss;`);
-      } catch {
-        // ignore
+        if (process.env.NODE_ENV !== 'test') {
+          console.log('✓ VSS extension loaded successfully');
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn(`VSS extension failed to load: ${(e as Error).message}`);
+        }
       }
     }
 
@@ -47,16 +48,9 @@ export async function runSchema(db: duckdb.Database): Promise<void> {
        );`
     );
     await promisifyRun(conn, `CREATE INDEX IF NOT EXISTS chunks_url_idx ON chunks(url);`);
-    if (!skipVss) {
-      try {
-        await promisifyRun(
-          conn,
-          `CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (metric='cosine');`
-        );
-      } catch {
-        // ignore
-      }
-    }
+
+    // Note: VSS extension in DuckDB uses table functions (vss_match, array_cosine_similarity)
+    // instead of indexes for similarity search. No VSS index creation needed.
   } finally {
     conn.close();
   }

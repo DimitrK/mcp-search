@@ -5,19 +5,18 @@ import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-jest.mock('duckdb', () => {
-  const run = jest.fn((sql: string, cb: (err?: Error | null) => void) => {
+jest.mock('@duckdb/node-api', () => {
+  const run = jest.fn(async (sql: string) => {
     // Simulate VSS statements succeeding and other DDL too
-    cb(null);
   });
-  const connect = jest.fn((cb: (err: Error | null, conn: any) => void) =>
-    cb(null, { run, close: jest.fn() })
-  );
-  const Database = function (this: any) {
-    this.connect = connect;
-    this.close = jest.fn();
-  } as unknown as new (...args: any[]) => any;
-  return { __esModule: true, default: { Database } };
+  const runAndReadAll = jest.fn(async (sql: string) => {
+    return {
+      getRowObjects: () => [],
+    } as unknown;
+  });
+  const connect = jest.fn(async () => ({ run, runAndReadAll, closeSync: jest.fn() }));
+  const create = jest.fn(async (_path: string) => ({ connect, closeSync: jest.fn() }));
+  return { DuckDBInstance: { create } };
 });
 
 describe('duckdbVectorStore init', () => {
@@ -36,6 +35,5 @@ describe('duckdbVectorStore init', () => {
     const db = await initDuckDb();
     expect(db).toBeTruthy();
     expect(getDatabasePath()).toContain('mcp.duckdb');
-    await db.close();
   });
 });

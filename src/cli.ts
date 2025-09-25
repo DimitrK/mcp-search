@@ -4,6 +4,7 @@ import { parseArgs } from 'util';
 import { McpSearchServer } from './server';
 import { APP_NAME, APP_VERSION } from './config/constants';
 import { logger } from './utils/logger';
+import { closeGlobalPool } from './core/vector/store/pool';
 
 const HELP_TEXT = `
 ${APP_NAME} v${APP_VERSION}
@@ -69,6 +70,23 @@ async function main(): Promise<void> {
   switch (command) {
     case 'server': {
       const server = new McpSearchServer();
+
+      // Graceful shutdown handling
+      const shutdown = async (signal: string) => {
+        logger.info({ signal }, 'Received shutdown signal, closing gracefully...');
+        try {
+          await closeGlobalPool();
+          logger.info('Database pool closed successfully');
+          process.exit(0);
+        } catch (error) {
+          logger.error({ error }, 'Error during graceful shutdown');
+          process.exit(1);
+        }
+      };
+
+      process.on('SIGTERM', () => shutdown('SIGTERM'));
+      process.on('SIGINT', () => shutdown('SIGINT'));
+
       await server.start();
       break;
     }

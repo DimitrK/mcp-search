@@ -1,8 +1,14 @@
-import duckdb from 'duckdb';
 import { getEnvironment } from '../../../config/environment';
-import { initDuckDb } from './connection';
+import { initDuckDb, DuckDbDatabaseLike, DuckDbConnectionLike } from './connection';
 
-type Connection = duckdb.Connection;
+const GLOBAL_KEY = '__MPC_SEARCH__DUCKDB_POOL__';
+const getGlobalPool = (): DuckDbPool | null =>
+  (globalThis as unknown as Record<string, unknown>)[GLOBAL_KEY] as DuckDbPool | null;
+const setGlobalPool = (pool: DuckDbPool | null): void => {
+  (globalThis as unknown as Record<string, unknown>)[GLOBAL_KEY] = pool as unknown as object;
+};
+
+type Connection = DuckDbConnectionLike;
 
 interface Waiter<T> {
   resolve: (v: T) => void;
@@ -17,7 +23,7 @@ export interface PoolOptions {
 }
 
 export class DuckDbPool {
-  private db: duckdb.Database;
+  private db: DuckDbDatabaseLike;
   private max: number;
   private acquireTimeoutMs: number;
   private idleTimeoutMs: number;
@@ -27,7 +33,7 @@ export class DuckDbPool {
   private isClosing: boolean;
   private closeFailures: number;
 
-  constructor(db: duckdb.Database, opts?: PoolOptions) {
+  constructor(db: DuckDbDatabaseLike, opts?: PoolOptions) {
     const env = getEnvironment();
     this.db = db;
     this.max = opts?.max ?? env.CONCURRENCY;
@@ -96,19 +102,16 @@ export class DuckDbPool {
     }
   }
 
-  async runInTransaction<T>(
-    fn: (conn: Connection) => Promise<T>,
-    mode: 'DEFERRED' | 'IMMEDIATE' | 'EXCLUSIVE' = 'DEFERRED'
-  ): Promise<T> {
+  async runInTransaction<T>(fn: (conn: Connection) => Promise<T>): Promise<T> {
     return await this.withConnection(async conn => {
-      await this.run(conn, `BEGIN ${mode}`);
+      await this.run(conn, 'BEGIN');
       try {
         const result = await fn(conn);
         await this.run(conn, 'COMMIT');
         return result;
       } catch (e) {
         await this.run(conn, 'ROLLBACK').catch(() => undefined);
-        throw e;
+        throw e as Error;
       }
     });
   }
@@ -120,27 +123,14 @@ export class DuckDbPool {
   }
 
   private async createConnection(): Promise<Connection> {
-    const anyDb = this.db as unknown as {
-      connect:
-        | ((cb: (err: Error | null, conn: duckdb.Connection) => void) => void)
-        | (() => duckdb.Connection);
-    };
-    try {
-      const maybeConn = (anyDb.connect as unknown as () => unknown).call(anyDb) as unknown;
-      if (maybeConn && typeof maybeConn === 'object') {
-        const conn = maybeConn as duckdb.Connection;
-        if (typeof (conn as unknown as { run?: unknown }).run === 'function') {
-          return conn;
+    return new Promise<Connection>((resolve, reject) => {
+      this.db.connect((err: Error | null, conn: DuckDbConnectionLike) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(conn);
         }
-      }
-    } catch {
-      // ignore; fall through to callback style
-    }
-    return await new Promise<Connection>((resolve, reject) => {
-      (anyDb.connect as (cb: (err: Error | null, conn: duckdb.Connection) => void) => void).call(
-        anyDb,
-        (err: Error | null, conn: duckdb.Connection) => (err ? reject(err) : resolve(conn))
-      );
+      });
     });
   }
 
@@ -217,22 +207,31 @@ export class DuckDbPool {
   }
 }
 
-let globalPool: DuckDbPool | null = null;
 export async function getPool(opts?: { correlationId?: string }): Promise<DuckDbPool> {
-  if (globalPool) return globalPool;
+  const existing = getGlobalPool();
+  if (existing) return existing;
   const env = getEnvironment();
   const mode = env.VECTOR_DB_MODE ?? 'inline';
   if (mode === 'inline') {
     const db = await initDuckDb();
-    globalPool = new DuckDbPool(db);
-    return globalPool;
+    const pool = new DuckDbPool(db);
+    setGlobalPool(pool);
+    return pool;
   }
-  // thread/process: use the same client API via worker. Inline never reaches the worker client.
-  // DB is initialized inside the worker on first message; parent should not open the DB.
   const { WorkerDuckDbPool } = await import('./workerPool');
   const worker = new WorkerDuckDbPool(env.REQUEST_TIMEOUT_MS, undefined, {
     correlationId: opts?.correlationId,
   }) as unknown as DuckDbPool;
-  globalPool = worker;
+  setGlobalPool(worker);
   return worker;
+}
+
+export async function closeGlobalPool(): Promise<void> {
+  const p = getGlobalPool();
+  if (!p) return;
+  try {
+    await p.close();
+  } finally {
+    setGlobalPool(null);
+  }
 }

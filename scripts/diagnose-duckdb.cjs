@@ -1,4 +1,4 @@
-const duckdb = require('duckdb');
+const { DuckDBInstance } = require('@duckdb/node-api');
 const { join, dirname } = require('path');
 const { mkdirSync, rmSync } = require('fs');
 
@@ -15,33 +15,44 @@ function cleanup() {
   }
 }
 
-console.log(`[DIAGNOSTIC] Starting DuckDB test.`);
-console.log(`[DIAGNOSTIC] Database path: ${dbPath}`);
+async function main() {
+  console.log(`[DIAGNOSTIC] Starting DuckDB test with @duckdb/node-api.`);
+  console.log(`[DIAGNOSTIC] Database path: ${dbPath}`);
 
-cleanup();
-mkdirSync(dbDir, { recursive: true });
+  cleanup();
+  mkdirSync(dbDir, { recursive: true });
 
-console.log('[DIAGNOSTIC] Calling new duckdb.Database()...');
+  try {
+    console.log('[DIAGNOSTIC] Calling DuckDBInstance.create()...');
+    const instance = await DuckDBInstance.create(dbPath);
+    console.log('[DIAGNOSTIC] DuckDB instance created successfully.');
 
-const db = new duckdb.Database(dbPath, (err) => {
-  if (err) {
-    console.error('[DIAGNOSTIC] FATAL: Error during DB initialization callback:', err);
+    console.log('[DIAGNOSTIC] Connecting to database...');
+    const conn = await instance.connect();
+    console.log('[DIAGNOSTIC] Connection established successfully.');
+
+    console.log('[DIAGNOSTIC] Running test query...');
+    await conn.run('CREATE TABLE test (id INTEGER, name TEXT)');
+    await conn.run("INSERT INTO test VALUES (1, 'hello'), (2, 'world')");
+    const result = await conn.runAndReadAll('SELECT * FROM test');
+    const rows = result.getRowObjects();
+    console.log('[DIAGNOSTIC] Test query results:', rows);
+
+    console.log('[DIAGNOSTIC] Closing connection...');
+    conn.closeSync();
+    console.log('[DIAGNOSTIC] Connection closed successfully.');
+
+    console.log('[DIAGNOSTIC] Closing instance...');
+    instance.closeSync();
+    console.log('[DIAGNOSTIC] Instance closed successfully.');
+
+    cleanup();
+    console.log('[DIAGNOSTIC] Script finished successfully.');
+  } catch (err) {
+    console.error('[DIAGNOSTIC] FATAL: Error during DuckDB operations:', err);
     cleanup();
     process.exit(1);
   }
-  console.log('[DIAGNOSTIC] DB constructor callback fired successfully.');
+}
 
-  db.close((err) => {
-    if (err) {
-      console.error('[DIAGNOSTIC] FATAL: Error during DB close callback:', err);
-      cleanup();
-      process.exit(1);
-    }
-    console.log('[DIAGNOSTIC] DB close callback fired successfully.');
-    cleanup();
-    console.log('[DIAGNOSTIC] Script finished successfully.');
-    process.exit(0);
-  });
-});
-
-console.log('[DIAGNOSTIC] Script execution finished, waiting for callbacks...');
+main();

@@ -21,8 +21,17 @@ async function main() {
   console.error('[fetch-once] fetch done');
   console.log(JSON.stringify(res, null, 2));
   const db = await getPool();
-  db.close();
+  const closePromise = db.close();
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Pool close timeout')), 5000)
+  );
+  try {
+    await Promise.race([closePromise, timeoutPromise]);
+  } catch (error) {
+    console.error('[fetch-once] Error closing pool:', error);
+  }
   console.error('[fetch-once] done');
+
 }
 
 main().catch(err => {

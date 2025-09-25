@@ -42,10 +42,33 @@ export async function getDocument(
 ): Promise<DocumentRow | null> {
   const pool = await getPool(opts);
   return await pool.withConnection(async conn => {
-    const rows = await promisifyAll<DocumentRow>(conn, `SELECT * FROM documents WHERE url = ?`, [
-      url,
-    ]);
-    return rows[0] ?? null;
+    const rows = await promisifyAll<unknown>(
+      conn,
+      `SELECT url, title, etag, last_modified, last_crawled, content_hash FROM documents WHERE url = ?`,
+      [url]
+    );
+    if (!rows || rows.length === 0) return null;
+    const row = rows[0];
+    if (Array.isArray(row)) {
+      return {
+        url: row[0] as string,
+        title: row[1] as string | undefined,
+        etag: row[2] as string | undefined,
+        last_modified: row[3] as string | undefined,
+        last_crawled: row[4] as string | undefined,
+        content_hash: row[5] as string | undefined,
+      };
+    } else {
+      const o = row as Record<string, unknown>;
+      return {
+        url: o.url as string,
+        title: o.title as string | undefined,
+        etag: o.etag as string | undefined,
+        last_modified: o.last_modified as string | undefined,
+        last_crawled: o.last_crawled as string | undefined,
+        content_hash: o.content_hash as string | undefined,
+      };
+    }
   });
 }
 

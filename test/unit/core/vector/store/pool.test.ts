@@ -1,21 +1,24 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { DuckDbPool } from '../../../../../src/core/vector/store/pool';
-jest.mock('duckdb', () => ({ __esModule: true, default: {} }));
+import type {
+  DuckDbDatabaseLike,
+  DuckDbConnectionLike,
+} from '../../../../../src/core/vector/store/connection';
 
-const mockConn = () => ({
+const mockConn = (): DuckDbConnectionLike => ({
   run: (sql: string, cb: (err: Error | null) => void) => cb(null),
+  all: (sql: string, cb: (err: Error | null, rows?: unknown[]) => void) => cb(null, []),
   close: jest.fn(),
 });
 
-const mockDb = () => ({
-  connect: (cb: (err: Error | null, conn: any) => void) => cb(null, mockConn()),
+const mockDb = (): DuckDbDatabaseLike => ({
+  connect: (cb: (err: Error | null, conn: DuckDbConnectionLike) => void) => cb(null, mockConn()),
 });
 
 describe('DuckDbPool', () => {
   let pool: DuckDbPool;
 
   beforeEach(async () => {
-    // @ts-expect-error minimal duckdb.Database shape
     pool = new DuckDbPool(mockDb());
   });
 
@@ -36,25 +39,30 @@ describe('DuckDbPool', () => {
   });
 
   test('acquire times out when max reached and no release', async () => {
-    // @ts-expect-error minimal duckdb.Database shape
-    const smallPool = new DuckDbPool(mockDb(), { max: 1, acquireTimeoutMs: 20 });
+    const smallPool = new DuckDbPool(mockDb(), {
+      max: 1,
+      acquireTimeoutMs: 20,
+    });
     const c = await smallPool.acquire();
     await expect(smallPool.acquire()).rejects.toThrow('Pool acquire timeout');
     smallPool.release(c);
   });
 
   test('close failure increments counter and replacement keeps capacity', async () => {
-    const badConn = () => ({
+    const badConn = (): DuckDbConnectionLike => ({
       run: (sql: string, cb: (err: Error | null) => void) => cb(null),
+      all: (sql: string, cb: (err: Error | null, rows?: unknown[]) => void) => cb(null, []),
       close: () => {
         throw new Error('bad close');
       },
     });
-    const badDb = () => ({
-      connect: (cb: (err: Error | null, conn: any) => void) => cb(null, badConn()),
+    const badDb = (): DuckDbDatabaseLike => ({
+      connect: (cb: (err: Error | null, conn: DuckDbConnectionLike) => void) => cb(null, badConn()),
     });
-    // @ts-expect-error minimal duckdb.Database shape
-    const pool2 = new DuckDbPool(badDb(), { max: 1, idleTimeoutMs: 1 });
+    const pool2 = new DuckDbPool(badDb(), {
+      max: 1,
+      idleTimeoutMs: 1,
+    });
     const c2 = await pool2.acquire();
     // Simulate broken by discarding directly
     (pool2 as unknown as { discardConnection: (c: unknown) => void }).discardConnection(c2);

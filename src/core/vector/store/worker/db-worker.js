@@ -1,6 +1,6 @@
 /* global process */
 import { parentPort as threadParentPort, workerData, isMainThread } from 'worker_threads';
-import duckdb from 'duckdb';
+import { DuckDBInstance } from '@duckdb/node-api';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -29,10 +29,6 @@ CREATE TABLE IF NOT EXISTS chunks (
 CREATE INDEX IF NOT EXISTS chunks_url_idx ON chunks(url);
 `;
 
-const VSS_INDEX = `
-CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (metric='cosine');
-`;
-
 if (!parentPort && typeof process.send !== 'function') {
   throw new Error('This script must be run as a worker thread or child process.');
 }
@@ -40,54 +36,63 @@ if (!parentPort && typeof process.send !== 'function') {
 const dbPath = (workerData && workerData.dbPath) || process.env.DB_PATH;
 mkdirSync(dirname(dbPath), { recursive: true });
 
-let db;
-try {
-  db = new duckdb.Database(dbPath, err => {
-    if (err) {
-      (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-        type: 'init-error',
-        error: err.message,
-      });
-      return;
-    }
-
-    db.exec(SCHEMA, err2 => {
-      if (err2) {
-        (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-          type: 'init-error',
-          error: `Schema creation failed: ${err2.message}`,
-        });
-        return;
-      }
-
-      db.exec('INSTALL vss; LOAD vss;', err3 => {
-        if (err3) {
-          globalThis.console?.warn?.(
-            '[DB-WORKER] VSS extension failed to load. VSS index will not be created.'
-          );
-        } else {
-          db.exec(VSS_INDEX, err4 => {
-            if (err4) {
-              globalThis.console?.warn?.('[DB-WORKER] Failed to create VSS index.');
-            }
-          });
-        }
-        (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-          type: 'init-success',
-        });
-      });
+let conn;
+(async () => {
+  try {
+    const instance = await DuckDBInstance.create(dbPath, {
+      allow_unsigned_extensions: 'true',
     });
-  });
-} catch (e) {
+    conn = await instance.connect();
+    await conn.run(SCHEMA);
+
+    const skipVss =
+      process.env.SKIP_VSS_INSTALL === '1' ||
+      (process.env.SKIP_VSS_INSTALL || '').toLowerCase() === 'true';
+
+    const finishInit = () =>
+      (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
+        type: 'init-success',
+      });
+
+    if (skipVss) {
+      finishInit();
+    } else {
+      try {
+        // Install and load VSS extension (allow_unsigned_extensions set during instance creation)
+        await conn.run('INSTALL vss');
+        await conn.run('LOAD vss');
+        globalThis.console?.log?.('[DB-WORKER] VSS extension loaded successfully');
+
+        // Note: VSS extension uses table functions (vss_match, array_cosine_similarity)
+        // instead of indexes for similarity search. No index creation needed.
+      } catch (e) {
+        globalThis.console?.warn?.(
+          `[DB-WORKER] VSS extension failed to load: ${(e && e.message) || String(e)}`
+        );
+      }
+      finishInit();
+    }
+  } catch (e) {
+    (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
+      type: 'init-error',
+      error: e.message,
+    });
+  }
+})().catch(e => {
   (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
     type: 'init-error',
     error: e.message,
   });
-}
+});
 
-const onMessage = msg => {
+const convertToPositionalParams = sql => {
+  let paramIndex = 1;
+  return sql.replace(/\?/g, () => `$${paramIndex++}`);
+};
+
+const onMessage = async msg => {
   const { id, type, sql, params } = msg;
-  if (!db) {
+  if (!conn) {
     (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
       id,
       type: 'error',
@@ -98,56 +103,57 @@ const onMessage = msg => {
 
   try {
     if (type === 'close') {
-      db.close(err => {
-        if (err) {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'close-error',
-            error: err.message,
-          });
-        } else {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'close-success',
-          });
+      try {
+        if (conn) {
+          conn.closeSync();
         }
+      } catch {
+        // ignore close errors
+      }
+
+      (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
+        id,
+        type: 'close-success',
       });
+      if (parentPort) {
+        parentPort.close();
+      } else {
+        process.exit(0);
+      }
       return;
     }
 
-    const conn = db.connect();
-
     if (type === 'run') {
-      conn.run(sql, ...(params || []), err => {
-        if (err) {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'error',
-            error: err.message,
-          });
-        } else {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'run-success',
-            result: null,
-          });
-        }
+      const sqlWithPositionalParams =
+        params && params.length > 0 ? convertToPositionalParams(sql) : sql;
+      await conn.run(sqlWithPositionalParams, params && params.length > 0 ? params : undefined);
+      (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
+        id,
+        type: 'run-success',
+        result: null,
       });
     } else if (type === 'all') {
-      conn.all(sql, ...(params || []), (err, result) => {
-        if (err) {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'error',
-            error: err.message,
-          });
-        } else {
-          (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
-            id,
-            type: 'all-success',
-            result,
-          });
+      const sqlWithPositionalParams =
+        params && params.length > 0 ? convertToPositionalParams(sql) : sql;
+      const rs = await conn.runAndReadAll(
+        sqlWithPositionalParams,
+        params && params.length > 0 ? params : undefined
+      );
+      const arr = rs.getRowObjects();
+      const rows = arr.map(row => {
+        const o = {};
+        for (const [k, v] of Object.entries(row)) {
+          o[k.toLowerCase()] = v;
         }
+        return o;
+      });
+      const payload = parentPort
+        ? rows
+        : JSON.stringify(rows, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+      (parentPort ? parentPort.postMessage.bind(parentPort) : process.send.bind(process))({
+        id,
+        type: 'all-success',
+        result: payload,
       });
     }
   } catch (error) {

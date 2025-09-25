@@ -45,8 +45,8 @@ export async function fetchAndPersistDocument(
       statusCode: res.statusCode,
       notModified: true,
       etag: existing?.etag,
-      lastModified: existing?.last_modified,
-      contentHash: existing?.content_hash,
+      lastModified: existing?.last_modified ?? undefined,
+      contentHash: existing?.content_hash ?? undefined,
     };
   }
 

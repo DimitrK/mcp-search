@@ -59,11 +59,12 @@ function makeFakeConnection(timeoutMs: number, ops: DbOps, log: typeof logger): 
 }
 
 export class WorkerDuckDbPool {
-  private stats = { total: 1, idle: 0, queueLength: 0, closeFailures: 0, max: 1 };
   private readonly conn: WorkerConnShape;
   private readonly acquireTimeoutMs: number;
   private readonly ops: DbOps;
   private log = logger;
+  private closeFailures = 0;
+  private isClosed = false;
 
   constructor(
     acquireTimeoutMs: number,
@@ -102,13 +103,36 @@ export class WorkerDuckDbPool {
   }
 
   async runInTransaction<T>(fn: (conn: WorkerConnShape) => Promise<T>): Promise<T> {
-    return await this.withConnection(fn);
+    return await this.withConnection(async conn => {
+      await this.runSql(conn, 'BEGIN');
+      try {
+        const result = await fn(conn);
+        await this.runSql(conn, 'COMMIT');
+        return result;
+      } catch (e) {
+        await this.runSql(conn, 'ROLLBACK').catch(() => undefined);
+        throw e as Error;
+      }
+    });
+  }
+
+  private async runSql(conn: WorkerConnShape, sql: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      conn.run(sql, (err: Error | null) => (err ? reject(err) : resolve()));
+    });
   }
 
   async close(): Promise<void> {
     this.log.info('WorkerDuckDbPool closing');
-    await this.ops.closeDb();
-    this.log.info('WorkerDuckDbPool closed');
+    try {
+      await this.ops.closeDb();
+      this.isClosed = true;
+      this.log.info('WorkerDuckDbPool closed');
+    } catch (error) {
+      this.closeFailures++;
+      this.log.error({ error }, 'WorkerDuckDbPool close failed');
+      throw error;
+    }
   }
 
   setCorrelationId(correlationId?: string): void {
@@ -116,6 +140,12 @@ export class WorkerDuckDbPool {
   }
 
   getStats() {
-    return this.stats;
+    return {
+      total: this.isClosed ? 0 : 1, // Worker connection exists if not closed
+      idle: this.isClosed ? 0 : 1, // Worker is always "idle" from pool perspective
+      queueLength: 0, // No queuing at this level (handled by worker internally)
+      closeFailures: this.closeFailures,
+      max: 1, // Single worker connection
+    };
   }
 }

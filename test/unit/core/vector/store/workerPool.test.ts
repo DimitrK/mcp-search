@@ -95,10 +95,76 @@ describe('WorkerDuckDbPool', () => {
     const pool = new WorkerDuckDbPool(1000);
     expect(pool.getStats()).toEqual({
       total: 1,
-      idle: 0,
+      idle: 1, // Worker is idle when not closed
       queueLength: 0,
       closeFailures: 0,
       max: 1,
     });
+  });
+
+  test('runInTransaction executes BEGIN and COMMIT (critical transaction test)', async () => {
+    const capturedOperations: Array<{ sql: string; params?: unknown[] }> = [];
+
+    const mockDbRun = jest.fn<(sql: string, params?: unknown[]) => Promise<void>>();
+    mockDbRun.mockImplementation(async (sql, params) => {
+      capturedOperations.push({ sql, params });
+    });
+
+    const mockDbAll = jest.fn<(sql: string, params?: unknown[]) => Promise<unknown[]>>();
+    mockDbAll.mockResolvedValue([]);
+
+    const mockCloseDb = jest.fn<() => Promise<void>>();
+    mockCloseDb.mockResolvedValue();
+
+    const pool = new WorkerDuckDbPool(1000, {
+      dbRun: mockDbRun,
+      dbAll: mockDbAll,
+      closeDb: mockCloseDb,
+    });
+
+    // This is THE critical test - before our fix, this wouldn't create transactions
+    await pool.runInTransaction(async () => {
+      return 'success';
+    });
+
+    // Verify actual transaction commands were executed (the bug was: they weren't!)
+    expect(capturedOperations.length).toBe(2);
+    expect(capturedOperations[0]).toEqual({ sql: 'BEGIN', params: [] });
+    expect(capturedOperations[1]).toEqual({ sql: 'COMMIT', params: [] });
+
+    // Double-check the specific calls
+    expect(mockDbRun).toHaveBeenCalledWith('BEGIN', []);
+    expect(mockDbRun).toHaveBeenCalledWith('COMMIT', []);
+  });
+
+  test('runInTransaction executes ROLLBACK on error', async () => {
+    const capturedOperations: Array<{ sql: string; params?: unknown[] }> = [];
+
+    const mockDbRun = jest.fn<(sql: string, params?: unknown[]) => Promise<void>>();
+    mockDbRun.mockImplementation(async (sql, params) => {
+      capturedOperations.push({ sql, params });
+    });
+
+    const mockDbAll = jest.fn<(sql: string, params?: unknown[]) => Promise<unknown[]>>();
+    const mockCloseDb = jest.fn<() => Promise<void>>();
+
+    const pool = new WorkerDuckDbPool(1000, {
+      dbRun: mockDbRun,
+      dbAll: mockDbAll,
+      closeDb: mockCloseDb,
+    });
+
+    const testError = new Error('Test error');
+
+    await expect(
+      pool.runInTransaction(async () => {
+        throw testError;
+      })
+    ).rejects.toThrow('Test error');
+
+    // Verify ROLLBACK was called instead of COMMIT
+    expect(capturedOperations.length).toBe(2);
+    expect(capturedOperations[0]).toEqual({ sql: 'BEGIN', params: [] });
+    expect(capturedOperations[1]).toEqual({ sql: 'ROLLBACK', params: [] });
   });
 });

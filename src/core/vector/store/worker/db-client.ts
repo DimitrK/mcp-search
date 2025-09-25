@@ -98,7 +98,9 @@ function getWorker() {
       const promise = inflight.get(id);
       if (promise) {
         if (error) promise.reject(new Error(error));
-        else promise.resolve(result);
+        else {
+          promise.resolve(result);
+        }
         inflight.delete(id);
       }
     });
@@ -172,17 +174,59 @@ export const dbAll = (sql: string, params?: unknown[]): Promise<unknown[]> =>
 
 export async function closeDb() {
   if (!worker) return;
-  await postMessage('close');
+
+  // Send close message to worker
+  try {
+    await postMessage('close');
+  } catch {
+    // Worker might already be dead, continue with cleanup
+  }
+
+  // Wait for inflight operations to complete (with timeout)
+  const inflightPromise = waitForInflightOperations(5000);
+
+  // Terminate worker after inflight operations or timeout
   if (worker instanceof Worker) {
-    await worker.terminate();
+    await Promise.race([inflightPromise, worker.terminate()]);
   } else {
     try {
       worker.kill('SIGTERM');
+      await Promise.race([inflightPromise, new Promise(resolve => setTimeout(resolve, 1000))]);
     } catch {
       // ignore
     }
   }
+
+  // Reject any remaining inflight operations
+  rejectAllInflightOperations();
+
+  // Clean up state
   worker = null;
   isInitialized = false;
   initPromise = null;
+}
+
+async function waitForInflightOperations(timeoutMs: number): Promise<void> {
+  if (inflight.size === 0) return;
+
+  return new Promise<void>(resolve => {
+    const checkInterval = setInterval(() => {
+      if (inflight.size === 0) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      resolve();
+    }, timeoutMs);
+  });
+}
+
+function rejectAllInflightOperations(): void {
+  for (const [_id, { reject }] of inflight.entries()) {
+    reject(new Error('Database worker terminated during operation'));
+  }
+  inflight.clear();
 }

@@ -36,16 +36,20 @@ export async function ensureEmbeddingConfig(
         }
 
         if (!existingModel) {
-          await promisifyRunParams(conn, `INSERT INTO meta(key, value) VALUES (?, ?)`, [
-            'embedding_model',
-            modelName,
-          ]);
+          await promisifyRunParams(
+            conn,
+            `INSERT INTO meta(key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+            ['embedding_model', modelName]
+          );
         }
         if (existingDim === undefined) {
-          await promisifyRunParams(conn, `INSERT INTO meta(key, value) VALUES (?, ?)`, [
-            'embedding_dim',
-            String(dimension),
-          ]);
+          await promisifyRunParams(
+            conn,
+            `INSERT INTO meta(key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+            ['embedding_dim', String(dimension)]
+          );
         }
       })
   );
