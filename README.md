@@ -44,6 +44,13 @@ CONCURRENCY=2                           # Default: 2
 GOOGLE_SAFE_SEARCH=off                  # Default: off (off|moderate|strict)
 ```
 
+### Playwright (for crawling)
+
+Run on the server the following commands
+`npm install playwright@1.55.1`
+`npx playwright install --with-deps chromium`
+
+
 ## Usage
 
 ### As MCP Server
