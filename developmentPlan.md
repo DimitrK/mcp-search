@@ -185,11 +185,11 @@ ls ~/.local/share/mcp-search/db/mpc.duckdb
 
 ### Acceptance Criteria:
 
-- [ ] Extracts clean text from news articles
-- [ ] Removes navigation, ads, and boilerplate content
-- [ ] Chunks content semantically by headings and sections
-- [ ] Playwright fallback works for JS-heavy sites
-- [ ] Token estimation is reasonably accurate
+- [x] Extracts clean text from news articles
+- [x] Removes navigation, ads, and boilerplate content
+- [x] Chunks content semantically by headings and sections
+- [x] Playwright fallback works for JS-heavy sites
+- [x] Token estimation is reasonably accurate
 
 ### Verification:
 
