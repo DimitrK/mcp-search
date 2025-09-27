@@ -33,7 +33,7 @@ export async function extractWithCheerio(
       'Extracted initial metadata'
     );
 
-    // Remove non-textual content
+    // Remove non-textual content INCLUDING CSS
     const beforeMultimedia = $('*').length;
     removeMultimediaContent($);
     const afterMultimedia = $('*').length;
@@ -45,7 +45,7 @@ export async function extractWithCheerio(
         afterCount: afterMultimedia,
         removedElements: beforeMultimedia - afterMultimedia,
       },
-      'Removed multimedia content'
+      'Removed multimedia content including CSS'
     );
 
     // Remove noise elements
@@ -82,8 +82,12 @@ export async function extractWithCheerio(
       'Targeted content elements'
     );
 
-    // Extract text content
-    const textContent = contentElement.text().trim();
+    // Extract text content and fix missing spaces between words
+    const rawText = contentElement.text();
+    const textContent = rawText
+      .replace(/([α-ωa-z0-9])([Α-ΩA-Z])/g, '$1 $2') // Any lowercase/digit followed by uppercase
+      .replace(/\s+/g, ' ')
+      .trim();
 
     // Extract section paths from headings
     const sectionPaths = extractSectionPaths($, contentElement);
@@ -119,6 +123,7 @@ export async function extractWithCheerio(
 }
 
 function removeMultimediaContent($: cheerio.CheerioAPI): void {
+  // Remove all non-textual content including CSS <style> tags and <link> stylesheets
   $(ALL_NON_TEXTUAL_SELECTORS).remove();
 }
 

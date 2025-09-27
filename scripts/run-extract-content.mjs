@@ -1,188 +1,194 @@
 #!/usr/bin/env node
-import { extractContent } from '../dist/core/content/htmlContentExtractor.js';
 import { fetch } from 'undici';
+import { extractContent } from '../dist/core/content/htmlContentExtractor.js';
+import { generateCorrelationId } from '../dist/utils/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-async function fetchHTML(url) {
-  console.error(`[extract-content] Fetching: ${url}`);
-  
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
-      },
-      redirect: 'follow'
-    });
+function parseArgs(args) {
+  const options = {
+    full: false,
+    json: false,
+    quiet: false,
+  };
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/html')) {
-      throw new Error(`Invalid content type: ${contentType}. Expected text/html.`);
-    }
-
-    const html = await response.text();
-    console.error(`[extract-content] Fetched ${html.length} characters`);
-    
-    return html;
-  } catch (error) {
-    console.error(`[extract-content] Fetch failed: ${error.message}`);
-    throw error;
+  for (const arg of args) {
+    if (arg === '--full') options.full = true;
+    if (arg === '--json') options.json = true;
+    if (arg === '--quiet') options.quiet = true;
   }
+
+  return options;
 }
 
-function displayExtractionResult(result, url) {
-  console.log('\n' + '='.repeat(80));
-  console.log(`📄 CONTENT EXTRACTION REPORT`);
+function printUsage() {
+  console.error(`
+Usage: node scripts/run-extract-content.mjs <URL> [OPTIONS]
+
+Extract and display text content from a web page using the MCP content extraction pipeline.
+
+Arguments:
+  URL                    The URL to extract content from
+
+Options:
+  --full                 Show full extracted content (default: truncated preview)
+  --json                 Output results as JSON
+  --quiet                Show only basic extraction metrics
+  --help                 Show this help message
+
+Examples:
+  node scripts/run-extract-content.mjs https://example.com
+  node scripts/run-extract-content.mjs https://example.com --json
+  node scripts/run-extract-content.mjs https://example.com --full
+  node scripts/run-extract-content.mjs https://example.com --quiet
+`);
+}
+
+function truncateText(text, maxLength = 500) {
+  if (!text || text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+}
+
+function printReport(url, result, showFull) {
+  console.log('');
   console.log('='.repeat(80));
-  
-  console.log(`🔗 URL: ${url}`);
-  console.log(`⚙️  Method: ${result.extractionMethod.toUpperCase()}`);
-  console.log(`📝 Title: ${result.title || 'No title found'}`);
+  console.log('CONTENT EXTRACTION REPORT');
+  console.log('='.repeat(80));
+  console.log('');
+  console.log(`📍 URL: ${url}`);
+  console.log(`⚡ Method: ${result.extractionMethod.toUpperCase()}`);
+  console.log(`📰 Title: ${result.title || 'N/A'}`);
   console.log(`🌍 Language: ${result.lang || 'Not detected'}`);
-  console.log(`📖 Excerpt: ${result.excerpt || 'No excerpt'}`);
-  console.log(`👤 Byline: ${result.byline || 'No byline'}`);
-  
+  console.log(`📝 Excerpt: ${result.excerpt || 'N/A'}`);
+  console.log(`👤 Byline: ${result.byline || 'N/A'}`);
+
   if (result.note) {
     console.log(`⚠️  Note: ${result.note}`);
   }
-  
-  console.log(`\n📊 METRICS:`);
+
+  console.log('');
+  console.log('📊 METRICS:');
   console.log(`   Characters: ${result.textContent.length.toLocaleString()}`);
-  console.log(`   Words: ${result.textContent.split(/\s+/).length.toLocaleString()}`);
-  console.log(`   Section Paths: ${result.sectionPaths.length}`);
-  
+  console.log(
+    `   Words: ${result.textContent
+      .split(/\\s+/)
+      .filter(w => w.length > 0)
+      .length.toLocaleString()}`
+  );
+  console.log(`   Sections: ${result.sectionPaths.length}`);
+
   if (result.sectionPaths.length > 0) {
-    console.log(`\n🗂️  SECTION STRUCTURE:`);
-    result.sectionPaths.forEach((path, index) => {
-      const truncated = path.length > 60 ? path.substring(0, 57) + '...' : path;
-      console.log(`   ${(index + 1).toString().padStart(2)}. ${truncated}`);
+    console.log('');
+    console.log('🗂️  SECTION PATHS:');
+    result.sectionPaths.forEach((section, i) => {
+      console.log(`   ${i + 1}. ${section}`);
     });
   }
-  
-  console.log(`\n📰 CONTENT PREVIEW (first 500 characters):`);
-  console.log('-'.repeat(50));
-  const preview = result.textContent.substring(0, 500).trim();
-  console.log(preview + (result.textContent.length > 500 ? '...' : ''));
-  console.log('-'.repeat(50));
-  
+
+  console.log('');
+  console.log('📄 CONTENT:');
+  console.log('-'.repeat(60));
+
+  if (showFull) {
+    console.log(result.textContent);
+  } else {
+    console.log(truncateText(result.textContent, 10000));
+    if (result.textContent.length > 500) {
+      console.log('');
+      console.log(`[Content truncated - ${result.textContent.length - 500} more characters]`);
+      console.log('Use --full flag to see complete content');
+    }
+  }
+
+  console.log('-'.repeat(60));
+
   // Quality indicators
-  console.log(`\n🎯 EXTRACTION QUALITY INDICATORS:`);
-  const hasTitle = !!result.title;
-  const hasSubstantialContent = result.textContent.length > 1000;
-  const hasStructure = result.sectionPaths.length > 0;
-  const isPrimaryMethod = result.extractionMethod === 'readability';
-  
-  console.log(`   ✅ Has Title: ${hasTitle ? 'Yes' : 'No'}`);
-  console.log(`   ✅ Substantial Content: ${hasSubstantialContent ? 'Yes' : 'No'} (${hasSubstantialContent ? '>1K chars' : '<1K chars'})`);
-  console.log(`   ✅ Has Structure: ${hasStructure ? 'Yes' : 'No'} (${result.sectionPaths.length} sections)`);
-  console.log(`   ✅ Primary Method: ${isPrimaryMethod ? 'Yes' : 'No'} (${result.extractionMethod})`);
-  
-  const qualityScore = [hasTitle, hasSubstantialContent, hasStructure, isPrimaryMethod].filter(Boolean).length;
-  const qualityLevel = qualityScore >= 3 ? '🟢 Excellent' : qualityScore >= 2 ? '🟡 Good' : '🔴 Poor';
-  console.log(`   🎯 Overall Quality: ${qualityLevel} (${qualityScore}/4)`);
-  
-  console.log('\n' + '='.repeat(80));
+  console.log('');
+  console.log('🎯 QUALITY INDICATORS:');
+  console.log(
+    `   Content Length: ${result.textContent.length >= 500 ? '✅ Good' : '⚠️  Short'} (${result.textContent.length} chars)`
+  );
+  console.log(`   Has Title: ${result.title ? '✅ Yes' : '❌ No'}`);
+  console.log(
+    `   Has Structure: ${result.sectionPaths.length > 0 ? '✅ Yes' : '❌ No'} (${result.sectionPaths.length} sections)`
+  );
+  console.log(`   Language Detected: ${result.lang ? '✅ Yes' : '❌ No'}`);
+  console.log(`   Extraction Quality: ${getQualityRating(result)}`);
+
+  console.log('');
 }
 
-function displayFullContent(result) {
-  console.log('\n' + '='.repeat(80));
-  console.log(`📄 FULL EXTRACTED CONTENT`);
-  console.log('='.repeat(80));
-  console.log(result.textContent);
-  console.log('='.repeat(80));
-}
-
-function displayJSONOutput(result, url) {
-  console.log('\n' + '='.repeat(80));
-  console.log(`📋 JSON OUTPUT`);
-  console.log('='.repeat(80));
-  
-  const output = {
-    url,
-    timestamp: new Date().toISOString(),
-    result
-  };
-  
-  console.log(JSON.stringify(output, null, 2));
-  console.log('='.repeat(80));
+function getQualityRating(result) {
+  if (result.extractionMethod === 'readability') return '🟢 Excellent';
+  if (result.extractionMethod === 'cheerio' && result.textContent.length > 200) return '🟡 Good';
+  if (result.extractionMethod === 'browser') return '🔵 SPA Processed';
+  if (result.extractionMethod === 'raw') return '🔴 Degraded';
+  return '❓ Unknown';
 }
 
 async function main() {
   const url = process.argv[2];
-  const options = process.argv.slice(3);
-  
-  if (!url) {
-    console.error('\n📋 USAGE:');
-    console.error('  node scripts/run-extract-content.mjs <url> [options]');
-    console.error('\n🏷️  OPTIONS:');
-    console.error('  --full      Show full extracted content');
-    console.error('  --json      Output JSON format');
-    console.error('  --quiet     Minimal output (just show extraction result)');
-    console.error('\n📝 EXAMPLES:');
-    console.error('  node scripts/run-extract-content.mjs https://example.com');
-    console.error('  node scripts/run-extract-content.mjs https://news.ycombinator.com --full');
-    console.error('  node scripts/run-extract-content.mjs https://github.com/microsoft/vscode --json');
-    process.exit(1);
+  const options = parseArgs(process.argv.slice(3));
+
+  if (!url || url === '--help') {
+    printUsage();
+    process.exit(url === '--help' ? 0 : 1);
   }
 
-  const showFull = options.includes('--full');
-  const showJSON = options.includes('--json');
-  const quiet = options.includes('--quiet');
+  const correlationId = generateCorrelationId();
+  console.error(`[extract-content] Starting content extraction...`);
+  console.error(`[extract-content] Fetching: ${url}`);
 
   try {
-    console.error('[extract-content] Starting content extraction...');
-    
-    // Fetch HTML content
-    const html = await fetchHTML(url);
-    
-    // Extract content using our pipeline
-    console.error('[extract-content] Processing through extraction pipeline...');
-    const correlationId = `manual-test-${Date.now()}`;
-    const result = await extractContent(html, url, { correlationId });
-    
-    console.error('[extract-content] Extraction completed successfully');
-    
-    if (quiet) {
-      console.log(JSON.stringify({ 
-        method: result.extractionMethod,
-        title: result.title,
-        contentLength: result.textContent.length,
-        sectionCount: result.sectionPaths.length
-      }));
-    } else if (showJSON) {
-      displayJSONOutput(result, url);
-    } else {
-      displayExtractionResult(result, url);
-      
-      if (showFull) {
-        displayFullContent(result);
-      }
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
-    console.error('[extract-content] Done');
-    
+    const html = await response.text();
+    console.error(`[extract-content] Fetched ${html.length} characters`);
+
+    console.error(`[extract-content] Processing through extraction pipeline...`);
+    const extractionResult = await extractContent(html, url, { correlationId });
+    console.error(`[extract-content] Extraction completed successfully`);
+
+    if (options.json) {
+      console.log(
+        JSON.stringify(
+          {
+            url,
+            timestamp: new Date().toISOString(),
+            result: extractionResult,
+          },
+          null,
+          2
+        )
+      );
+    } else if (options.quiet) {
+      console.log(
+        JSON.stringify(
+          {
+            method: extractionResult.extractionMethod,
+            contentLength: extractionResult.textContent.length,
+            sectionCount: extractionResult.sectionPaths.length,
+            hasTitle: !!extractionResult.title,
+            language: extractionResult.lang,
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      printReport(url, extractionResult, options.full);
+    }
   } catch (error) {
     console.error(`[extract-content] Error: ${error.message}`);
-    if (error.stack && !quiet) {
-      console.error(`[extract-content] Stack trace:`);
-      console.error(error.stack);
-    }
     process.exit(1);
   }
+  console.error(`[extract-content] Done`);
 }
 
 main().catch(err => {
-  console.error('[extract-content] Unexpected error:', err);
+  console.error(err);
   process.exit(1);
 });

@@ -8,6 +8,7 @@ import {
   PAGE_HEADER_SELECTORS,
   CONTENT_SELECTORS,
 } from './selectors';
+import { cleanRenderedCssFromText } from './textCleaner';
 
 export async function extractWithSpa(
   html: string,
@@ -16,12 +17,15 @@ export async function extractWithSpa(
   const logger = createChildLogger(options.correlationId || 'unknown');
 
   return withTiming(logger, 'spa_extraction', async () => {
+    let browser: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let context: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     try {
       // Check if Playwright is available
-      let playwright: any;
+      let playwright: any; // eslint-disable-line @typescript-eslint/no-explicit-any
       try {
-        // Use require for optional peer dependency to avoid TypeScript issues
-        playwright = await import('playwright');
+        // Use dynamic import for ESM compatibility
+        const playwrightModule = await import('playwright');
+        playwright = playwrightModule.default || playwrightModule;
       } catch (error) {
         logger.error(
           {
@@ -47,7 +51,7 @@ export async function extractWithSpa(
       );
 
       // Launch browser with aggressive timeouts and performance optimizations
-      const browser = await Promise.race([
+      browser = await Promise.race([
         playwright.chromium.launch({
           headless: true,
           timeout: 10000, // 10 second browser launch timeout
@@ -69,7 +73,7 @@ export async function extractWithSpa(
         ),
       ]);
 
-      const context = await Promise.race([
+      context = await Promise.race([
         browser.newContext({
           userAgent:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -150,7 +154,10 @@ export async function extractWithSpa(
             CONTENT_SELECTORS: string;
             HEADING_SELECTORS: string;
           }) => {
-            // Remove non-textual elements first (similar to other extractors)
+            // Extract title FIRST, before removing any elements (including <head>)
+            const title = document.title || undefined;
+
+            // Remove non-textual elements (similar to other extractors)
             const nonTextualSelectors = selectors.ALL_NON_TEXTUAL_SELECTORS.split(',').map(
               (s: string) => s.trim()
             );
@@ -177,9 +184,6 @@ export async function extractWithSpa(
               document.querySelectorAll(selector).forEach(el => el.remove());
             });
 
-            // Extract title
-            const title = document.title || undefined;
-
             // Extract language
             const lang =
               document.documentElement.lang ||
@@ -204,8 +208,10 @@ export async function extractWithSpa(
               }
             }
 
-            // Extract text content
-            const textContent = contentElement.textContent?.trim() || '';
+            // Extract text content and fix missing spaces between words
+            const rawText = contentElement.textContent || '';
+
+            const textContent = rawText.replace(/\s+/g, ' ').trim();
 
             // Extract section paths from headings
             const sectionPaths: string[] = [];
@@ -252,6 +258,8 @@ export async function extractWithSpa(
           }
         );
 
+        // Content quality validation completed
+
         // Check content quality - if insufficient, try URL navigation
         const contentLength = extractedData.contentLength || 0;
         const minContentThreshold = 500; // Same threshold as readability
@@ -284,7 +292,13 @@ export async function extractWithSpa(
 
             // Re-extract content after navigation
             const urlExtractedData = await page.evaluate(
-              (selectors: any) => {
+              (selectors: {
+                ALL_NON_TEXTUAL_SELECTORS: string;
+                NOISE_SELECTORS: string;
+                PAGE_HEADER_SELECTORS: string;
+                CONTENT_SELECTORS: string;
+                HEADING_SELECTORS: string;
+              }) => {
                 // Same extraction logic as before
                 const nonTextualSelectors = selectors.ALL_NON_TEXTUAL_SELECTORS.split(',').map(
                   (s: string) => s.trim()
@@ -328,7 +342,12 @@ export async function extractWithSpa(
                   }
                 }
 
-                const textContent = contentElement.textContent?.trim() || '';
+                // Extract text content and fix missing spaces between words
+                const rawText = contentElement.textContent || '';
+                const textContent = rawText
+                  .replace(/([α-ωa-z0-9])([Α-ΩA-Z])/g, '$1 $2') // Any lowercase/digit followed by uppercase
+                  .replace(/\s+/g, ' ')
+                  .trim();
                 const sectionPaths: string[] = [];
                 const headings = contentElement.querySelectorAll(selectors.HEADING_SELECTORS);
 
@@ -370,6 +389,8 @@ export async function extractWithSpa(
                 HEADING_SELECTORS,
               }
             );
+
+            // URL navigation content extracted
 
             // Check if URL navigation produced better content
             if (urlExtractedData.contentLength >= minContentThreshold) {
@@ -428,8 +449,12 @@ export async function extractWithSpa(
           'SPA content extraction completed successfully'
         );
 
+        // Apply CSS cleaning to the extracted text content in Node.js context
+        const cleanedTextContent = cleanRenderedCssFromText(extractedData.textContent);
+
         const result: ExtractionResult = {
           ...extractedData,
+          textContent: cleanedTextContent,
           extractionMethod: 'browser',
           excerpt: extractedData.excerpt,
           note: 'Content extracted using browser rendering for JavaScript-heavy page',
@@ -475,12 +500,8 @@ export async function extractWithSpa(
         'SPA extraction failed'
       );
 
-      if (error instanceof ExtractionError) {
-        throw error;
-      }
-
       throw new ExtractionError(
-        `SPA extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.message : 'Unknown SPA extraction error',
         options.url
       );
     }

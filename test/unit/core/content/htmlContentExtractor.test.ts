@@ -50,7 +50,7 @@ describe('HTMLContentExtractor Integration', () => {
       <nav class="main-nav">Skip to content</nav>
       <div class="cookie-banner">Accept cookies</div>
       <div class="promo">Subscribe to newsletter!</div>
-      
+
       <main>
         <article>
           <h1>Important Article Title</h1>
@@ -62,7 +62,7 @@ describe('HTMLContentExtractor Integration', () => {
           <p>Even more detailed content to ensure we exceed the character threshold requirements for Mozilla Readability to successfully identify this as a valid article worth extracting, despite the presence of navigation and promotional noise elements.</p>
         </article>
       </main>
-      
+
       <aside class="ads">Advertisement</aside>
       <dialog class="modal">Modal content</dialog>
       <footer class="site-footer">Footer links</footer>
@@ -86,7 +86,10 @@ describe('HTMLContentExtractor Integration', () => {
   `;
 
   test('successfully extracts content using readability for good articles', async () => {
-    const result = await extractContent(goodArticleHTML, 'https://example.com/good-article');
+    const result = await extractContent(
+      goodArticleHTML,
+      'https://example.com/good-article'
+    );
 
     expect(result).toBeDefined();
     expect(result.title).toBe('Complete Test Article');
@@ -103,7 +106,10 @@ describe('HTMLContentExtractor Integration', () => {
   });
 
   test('falls back through extraction chain for skeleton pages', async () => {
-    const result = await extractContent(skeletonPageHTML, 'https://example.com/skeleton');
+    const result = await extractContent(
+      skeletonPageHTML,
+      'https://example.com/skeleton'
+    );
 
     expect(result).toBeDefined();
     // SPA extraction should fail due to insufficient content and fall back to raw
@@ -114,7 +120,10 @@ describe('HTMLContentExtractor Integration', () => {
   }, 35000);
 
   test('uses readability despite noise when content is substantial', async () => {
-    const result = await extractContent(noisyButGoodHTML, 'https://example.com/noisy');
+    const result = await extractContent(
+      noisyButGoodHTML,
+      'https://example.com/noisy'
+    );
 
     expect(result).toBeDefined();
     expect(result.title).toBe('Noisy Article');
@@ -128,13 +137,18 @@ describe('HTMLContentExtractor Integration', () => {
   });
 
   test('falls back through extraction chain for short content', async () => {
-    const result = await extractContent(cheerioFallbackHTML, 'https://example.com/short');
+    const result = await extractContent(
+      cheerioFallbackHTML,
+      'https://example.com/short'
+    );
 
     expect(result).toBeDefined();
     // SPA extraction should fail due to insufficient content and fall back to raw
     expect(result.extractionMethod).toBe('raw');
     expect(result.textContent).toContain('Fallback Article');
-    expect(result.textContent).toContain('Short article that might not pass readability threshold');
+    expect(result.textContent).toContain(
+      'Short article that might not pass readability threshold'
+    );
     expect(result.lang).toBeUndefined(); // Raw extraction doesn't detect language
     expect(result.note).toContain('severely degraded');
   }, 35000);
@@ -154,7 +168,10 @@ describe('HTMLContentExtractor Integration', () => {
       </html>
     `;
 
-    const result = await extractContent(scriptHTML, 'https://example.com/script-test');
+    const result = await extractContent(
+      scriptHTML,
+      'https://example.com/script-test'
+    );
 
     expect(result).toBeDefined();
     expect(result.textContent).toContain('Content before script');
@@ -180,34 +197,55 @@ describe('HTMLContentExtractor Integration', () => {
       <html>
       <body>
         <article>
-          <h1>Main Title</h1>
+          <h1>Main Title Article with Comprehensive Content for Testing</h1>
           <section>
-            <h2>Section One</h2>
-            <p>Content here.</p>
+            <h2>Section One: Detailed Information</h2>
+            <p>This section contains substantial content that provides detailed information about the topic at hand. The content is comprehensive and meets the requirements for successful extraction by our content processing pipeline.</p>
+            <p>Additional paragraphs ensure that this section has enough content to be properly recognized and extracted by the Mozilla Readability engine, which requires a minimum character threshold to identify meaningful content.</p>
           </section>
           <section>
-            <h2>Section Two</h2>
-            <p>More content.</p>
+            <h2>Section Two: Further Analysis</h2>
+            <p>This second section continues with more detailed content, providing further analysis and comprehensive information about the subject matter. The content structure demonstrates proper semantic HTML organization.</p>
+            <p>Multiple paragraphs within each section ensure that we have sufficient content density to meet extraction quality requirements and demonstrate the effectiveness of our section path extraction functionality.</p>
+          </section>
+          <section>
+            <h2>Section Three: Conclusion</h2>
+            <p>The final section provides conclusive information and summarizes the key points covered in the previous sections. This comprehensive structure ensures that the content extraction process has substantial material to work with.</p>
           </section>
         </article>
       </body>
-      </html>
+    </html>
     `;
 
-    const result = await extractContent(structuredHTML, 'https://example.com/structured');
+    const result = await extractContent(
+      structuredHTML,
+      'https://example.com/structured'
+    );
 
     expect(result).toBeDefined();
-    expect(result.sectionPaths).toContain('Main Title');
-    expect(result.sectionPaths).toContain('Section One');
-    expect(result.sectionPaths).toContain('Section Two');
+    // With substantial content, this should use readability extraction
+    expect(result.extractionMethod).toBe('readability');
+    expect(result.sectionPaths).toContain(
+      'Main Title Article with Comprehensive Content for Testing'
+    );
+    expect(result.sectionPaths).toContain('Section One: Detailed Information');
+    expect(result.sectionPaths).toContain('Section Two: Further Analysis');
+    expect(result.sectionPaths).toContain('Section Three: Conclusion');
   });
 
   test('includes correlationId in options when provided', async () => {
-    const result = await extractContent(goodArticleHTML, 'https://example.com/correlation', {
-      correlationId: 'test-correlation-123',
-    });
+    const correlationId = 'test-correlation-123';
+    const result = await extractContent(
+      goodArticleHTML,
+      'https://example.com/correlation',
+      {
+        correlationId
+      }
+    );
 
     expect(result).toBeDefined();
     expect(result.extractionMethod).toBe('readability');
+    // Correlation ID is handled by the logger, not returned in the result
   });
 });
+

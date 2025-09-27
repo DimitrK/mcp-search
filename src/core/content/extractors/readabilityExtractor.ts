@@ -37,7 +37,7 @@ export async function extractWithReadability(
         'Extracted metadata before processing'
       );
 
-      // 3. Remove non-textual content (minimal sanitization)
+      // 3. Remove non-textual content including CSS (minimal sanitization)
       const beforeCleanup = document.body?.innerHTML.length || 0;
       removeMultimediaContent(document);
       const afterCleanup = document.body?.innerHTML.length || 0;
@@ -49,7 +49,7 @@ export async function extractWithReadability(
           afterCleanup,
           removedBytes: beforeCleanup - afterCleanup,
         },
-        'Removed non-textual content'
+        'Removed non-textual content including CSS'
       );
 
       // 4. Configure and run Mozilla Readability with charThreshold=500
@@ -143,6 +143,7 @@ function extractSectionPaths(document: Document): string[] {
 }
 
 function removeMultimediaContent(document: Document): void {
+  // Remove all non-textual elements including CSS <style> tags and <link> stylesheets
   const nonTextualElements = document.querySelectorAll(ALL_NON_TEXTUAL_SELECTORS);
   nonTextualElements.forEach(element => element.remove());
 }

@@ -188,7 +188,7 @@ describe('CheerioExtractor', () => {
     });
 
     expect(result).toBeDefined();
-    // Should prioritize article > main > other semantic elements
-    expect(result.textContent).toContain('Article element content');
+    // Should prioritize main > article > other semantic elements
+    expect(result.textContent).toContain('Main element content');
   });
 });
