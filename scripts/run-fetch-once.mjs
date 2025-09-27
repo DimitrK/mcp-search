@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { getPool } from '../dist/core/vector/store/pool.js';
 import { fetchAndPersistDocument } from '../dist/core/content/httpFetchAndPersist.js';
+import { deleteDocument } from '../dist/core/vector/store/documents.js';
+import { normalizeUrl } from '../dist/utils/urlValidator.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -20,6 +22,13 @@ async function main() {
   const res = await fetchAndPersistDocument(url);
   console.error('[fetch-once] fetch done');
   console.log(JSON.stringify(res, null, 2));
+
+  // Clean up test data - this is a development script, don't leave data behind
+  console.error('[fetch-once] cleaning up test data...');
+  const normalizedUrl = normalizeUrl(url);
+  await deleteDocument(normalizedUrl);
+  console.error('[fetch-once] cleanup completed');
+
   const db = await getPool();
   const closePromise = db.close();
   const timeoutPromise = new Promise((_, reject) =>
