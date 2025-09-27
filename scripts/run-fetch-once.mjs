@@ -28,10 +28,9 @@ async function main() {
   try {
     await Promise.race([closePromise, timeoutPromise]);
   } catch (error) {
-    console.error('[fetch-once] Error closing pool:', error);
+    console.error('Pool close timeout or error:', error.message);
   }
   console.error('[fetch-once] done');
-
 }
 
 main().catch(err => {

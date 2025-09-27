@@ -9,6 +9,23 @@ import {
   CONTENT_SELECTORS,
 } from './selectors';
 import { cleanRenderedCssFromText } from './textCleaner';
+import { MarkdownConverter } from './markdownConverter';
+
+// Timeout constants for better maintainability
+const TIMEOUTS = {
+  BROWSER_LAUNCH: 10000,
+  BROWSER_LAUNCH_RACE: 12000,
+  CONTEXT_CREATION: 5000,
+  SET_CONTENT: 3000,
+  SET_CONTENT_RACE: 5000,
+  WAIT_FOR_FUNCTION: 2000,
+  WAIT_FOR_FUNCTION_RACE: 3000,
+  SMALL_WAIT: 200,
+  URL_NAVIGATION: 8000,
+  URL_NAVIGATION_RACE: 10000,
+  URL_WAIT: 1000,
+  BROWSER_CLEANUP: 5000,
+} as const;
 
 export async function extractWithSpa(
   html: string,
@@ -54,7 +71,7 @@ export async function extractWithSpa(
       browser = await Promise.race([
         playwright.chromium.launch({
           headless: true,
-          timeout: 10000, // 10 second browser launch timeout
+          timeout: TIMEOUTS.BROWSER_LAUNCH,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -69,7 +86,10 @@ export async function extractWithSpa(
           ],
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Browser launch timeout')), 12000)
+          setTimeout(
+            () => reject(new Error('Browser launch timeout')),
+            TIMEOUTS.BROWSER_LAUNCH_RACE
+          )
         ),
       ]);
 
@@ -77,11 +97,12 @@ export async function extractWithSpa(
         browser.newContext({
           userAgent:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          locale: 'en-US',
           viewport: { width: 1280, height: 720 },
           ignoreHTTPSErrors: true,
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Context creation timeout')), 5000)
+          setTimeout(() => reject(new Error('Context creation timeout')), TIMEOUTS.CONTEXT_CREATION)
         ),
       ]);
 
@@ -97,10 +118,10 @@ export async function extractWithSpa(
         await Promise.race([
           page.setContent(html, {
             waitUntil: 'domcontentloaded',
-            timeout: 3000,
+            timeout: TIMEOUTS.SET_CONTENT,
           }),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('setContent timeout')), 5000)
+            setTimeout(() => reject(new Error('setContent timeout')), TIMEOUTS.SET_CONTENT_RACE)
           ),
         ]);
 
@@ -111,6 +132,7 @@ export async function extractWithSpa(
           await Promise.race([
             page.waitForFunction(
               () => {
+                // REVIEW: The resolution of appElement seems poor.
                 const appElement =
                   document.querySelector('#app') ||
                   document.querySelector('#root') ||
@@ -196,6 +218,7 @@ export async function extractWithSpa(
             );
 
             // Add SPA-specific selectors
+            // REVIEW: The resolution of appElement seems poor.
             const spaSpecificSelectors = ['#app', '#root', '[data-reactroot]', '.app'];
             const allContentSelectors = [...contentSelectors, ...spaSpecificSelectors];
 
@@ -247,6 +270,7 @@ export async function extractWithSpa(
               sectionPaths,
               lang,
               contentLength: textContent.length,
+              cleanedHtml: contentElement.innerHTML, // Capture the cleaned HTML structure
             };
           },
           {
@@ -344,10 +368,7 @@ export async function extractWithSpa(
 
                 // Extract text content and fix missing spaces between words
                 const rawText = contentElement.textContent || '';
-                const textContent = rawText
-                  .replace(/([α-ωa-z0-9])([Α-ΩA-Z])/g, '$1 $2') // Any lowercase/digit followed by uppercase
-                  .replace(/\s+/g, ' ')
-                  .trim();
+                const textContent = rawText.replace(/\s+/g, ' ').trim();
                 const sectionPaths: string[] = [];
                 const headings = contentElement.querySelectorAll(selectors.HEADING_SELECTORS);
 
@@ -379,6 +400,7 @@ export async function extractWithSpa(
                   sectionPaths,
                   lang,
                   contentLength: textContent.length,
+                  cleanedHtml: contentElement.innerHTML, // Capture the cleaned HTML structure
                 };
               },
               {
@@ -405,8 +427,22 @@ export async function extractWithSpa(
                 'URL navigation produced sufficient content'
               );
 
+              // Apply CSS cleaning to URL extracted content
+              const cleanedUrlContent = cleanRenderedCssFromText(urlExtractedData.textContent);
+              const finalUrlContent = cleanedUrlContent.trim() || urlExtractedData.textContent;
+
+              // Convert the cleaned HTML structure to markdown using MarkdownConverter
+              const markdownConverter = new MarkdownConverter();
+              const markdownContent = markdownConverter.convertToMarkdown(
+                urlExtractedData.cleanedHtml || `<div>${finalUrlContent}</div>`
+              );
+              const semanticInfo = markdownConverter.extractSemanticInfo(markdownContent);
+
               return {
                 ...urlExtractedData,
+                textContent: finalUrlContent,
+                markdownContent,
+                semanticInfo,
                 extractionMethod: 'browser' as const,
                 note: 'Content extracted using browser navigation after initial setContent failed',
               };
@@ -452,20 +488,19 @@ export async function extractWithSpa(
         // Apply CSS cleaning to the extracted text content in Node.js context
         const cleanedTextContent = cleanRenderedCssFromText(extractedData.textContent);
 
-        // For SPA, we don't have clean HTML structure, so markdown is the same as cleaned text
-        // TODO: Future enhancement could capture DOM structure from browser for better markdown
-        const markdownContent = cleanedTextContent;
-        const semanticInfo = {
-          headings: [],
-          codeBlocks: [],
-          lists: [],
-          wordCount: cleanedTextContent.split(/\s+/).length,
-          characterCount: cleanedTextContent.length,
-        };
+        // Fallback: if CSS cleaning removed everything, use the original text
+        const finalTextContent = cleanedTextContent.trim() || extractedData.textContent;
+
+        // Convert the cleaned HTML structure to markdown using MarkdownConverter
+        const markdownConverter = new MarkdownConverter();
+        const markdownContent = markdownConverter.convertToMarkdown(
+          extractedData.cleanedHtml || `<div>${finalTextContent}</div>`
+        );
+        const semanticInfo = markdownConverter.extractSemanticInfo(markdownContent);
 
         const result: ExtractionResult = {
           ...extractedData,
-          textContent: cleanedTextContent,
+          textContent: finalTextContent,
           markdownContent,
           semanticInfo,
           extractionMethod: 'browser',

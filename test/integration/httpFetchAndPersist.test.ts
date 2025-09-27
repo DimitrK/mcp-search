@@ -1,9 +1,22 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
-import { request } from 'undici';
 import { fetchAndPersistDocument } from '../../src/core/content/httpFetchAndPersist';
 import { clearEnvironmentCache } from '../../src/config/environment';
 
-jest.mock('undici', () => ({ request: jest.fn() as unknown }));
+// Simple mock that works around method chaining issues
+const mockRequest = jest.fn() as jest.MockedFunction<any>;
+const mockClose = jest.fn();
+
+jest.mock('undici', () => ({
+  Client: jest.fn().mockImplementation(() => ({
+    request: mockRequest,
+    close: mockClose,
+    compose: jest.fn().mockReturnThis(),
+  })),
+  interceptors: {
+    redirect: jest.fn().mockReturnValue(() => ({})),
+  },
+  Dispatcher: {},
+}));
 jest.mock('@duckdb/node-api', () => {
   let storedDoc: Record<string, unknown> | null = null;
   const run = jest.fn(async (sql: string) => {
@@ -38,14 +51,13 @@ type UndiciResponse = {
   headers: Record<string, unknown>;
   body: UndiciTextBody;
 };
-type UndiciRequest = (url: string, opts?: Record<string, unknown>) => Promise<UndiciResponse>;
-const mockedRequest = request as unknown as jest.MockedFunction<UndiciRequest>;
 
 // No DB mocking: use real @duckdb/node-api via connection adapter
 
 describe('fetchAndPersistDocument integration (200→304)', () => {
   beforeEach(() => {
-    mockedRequest.mockReset();
+    mockRequest.mockReset();
+    mockClose.mockReset();
     process.env.REQUEST_TIMEOUT_MS = '2000';
     clearEnvironmentCache();
   });
@@ -53,7 +65,7 @@ describe('fetchAndPersistDocument integration (200→304)', () => {
   test('persists on 200 and updates last_crawled only on 304', async () => {
     const firstBody = 'Hello world';
     let calls = 0;
-    mockedRequest.mockImplementation((_url: string, _opts: any) => {
+    mockRequest.mockImplementation((_opts: unknown) => {
       calls += 1;
       if (calls === 1) {
         return Promise.resolve({

@@ -545,3 +545,7 @@ docker run -p 3000:3000 mcp-search
 _Note: Timeline includes TDD approach with unit tests written alongside implementation_
 
 Each milestone includes buffer time for debugging, refinement, and unexpected issues. The plan prioritizes working software at each step with clear verification criteria. **Additional buffer**: 5-7 days total for integration issues and refactoring across all milestones.
+
+
+More todo in future iterrations: 
+ mcp.readFromPage can accept a chunkId from previous chunk result and do a search on all embeddings containing chunks created for this specific page.
