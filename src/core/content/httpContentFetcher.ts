@@ -74,21 +74,51 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
       headers,
     });
 
+    let promiseTimeoutId: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      promiseTimeoutId = setTimeout(() => {
         controller.abort();
         reject(new TimeoutError('Request timed out', timeoutMs));
       }, timeoutMs);
     });
 
+    log.debug({}, 'About to start HTTP request race with timeout...');
     const res = await withTiming(log, 'http.fetch', async () =>
       Promise.race([requestPromise, timeoutPromise])
     );
-    clearTimeout(timeout);
 
-    // Close client to avoid resource leaks
+    log.debug({ statusCode: res.statusCode }, 'HTTP request completed successfully');
+
+    // Clear BOTH timeouts after successful network request
+    // This allows body processing to continue without being aborted
+    clearTimeout(timeout);
+    if (promiseTimeoutId) {
+      clearTimeout(promiseTimeoutId);
+    }
+
+    log.debug({}, 'Both timeouts cleared - body processing can proceed without abort');
+
+    // Close client to avoid resource leaks (with timeout to prevent hanging)
+    log.debug({}, 'About to close undici client...');
     if (client && 'close' in client && typeof client.close === 'function') {
-      await client.close();
+      try {
+        // Timeout the client.close() operation to prevent indefinite hanging
+        await Promise.race([
+          client.close(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Client close timeout')), 2000)
+          ),
+        ]);
+        log.debug({}, 'Undici client closed successfully');
+      } catch (err) {
+        log.warn(
+          { error: (err as Error).message },
+          'Client close failed or timed out - continuing anyway'
+        );
+        // Don't throw - we have our response, client cleanup is not critical
+      }
+    } else {
+      log.debug({}, 'No client to close or client has no close method');
     }
 
     const statusCode = res.statusCode;
@@ -102,12 +132,36 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
     const encoding = (
       (res.headers?.['content-encoding'] as string | undefined) || ''
     ).toLowerCase();
+
+    log.debug({ encoding }, 'Body processing started');
+
+    log.debug({}, 'About to read response body arrayBuffer...');
     const ab = (await res.body.arrayBuffer()) as ArrayBuffer;
+    log.debug({ arrayBufferSize: ab.byteLength }, 'Response body arrayBuffer read successfully');
+
+    log.debug({}, 'Converting arrayBuffer to Buffer...');
     let buf: Buffer = Buffer.from(ab);
-    if (encoding.includes('br')) buf = brotliDecompressSync(buf);
-    else if (encoding.includes('gzip')) buf = gunzipSync(buf);
-    else if (encoding.includes('deflate')) buf = inflateSync(buf);
+    log.debug({ bufferSize: buf.length }, 'Buffer conversion completed');
+
+    if (encoding.includes('br')) {
+      log.debug({}, 'Decompressing with brotli...');
+      buf = brotliDecompressSync(buf);
+      log.debug({ decompressedSize: buf.length }, 'Brotli decompression completed');
+    } else if (encoding.includes('gzip')) {
+      log.debug({}, 'Decompressing with gzip...');
+      buf = gunzipSync(buf);
+      log.debug({ decompressedSize: buf.length }, 'Gzip decompression completed');
+    } else if (encoding.includes('deflate')) {
+      log.debug({}, 'Decompressing with deflate...');
+      buf = inflateSync(buf);
+      log.debug({ decompressedSize: buf.length }, 'Deflate decompression completed');
+    } else {
+      log.debug({}, 'No decompression needed');
+    }
+
+    log.debug({ bufferSize: buf.length }, 'About to convert buffer to UTF-8 string...');
     const bodyText = buf.toString('utf8');
+    log.debug({ textLength: bodyText.length }, 'UTF-8 string conversion completed');
     if (statusCode >= 400) {
       throw new NetworkError('HTTP error', statusCode);
     }
