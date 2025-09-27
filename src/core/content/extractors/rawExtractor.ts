@@ -28,7 +28,15 @@ export async function extractWithRaw(
       const result = {
         title: cleaningResult.title,
         textContent: cleaningResult.cleanedText,
+        markdownContent: cleaningResult.cleanedText, // Raw has no structure, just plain text
         sectionPaths: [], // Raw extraction has no structural information
+        semanticInfo: {
+          headings: [],
+          codeBlocks: [],
+          lists: [],
+          wordCount: cleaningResult.cleanedText.split(/\s+/).length,
+          characterCount: cleaningResult.cleanedText.length,
+        },
         extractionMethod: 'raw' as const,
         note: 'Content extraction severely degraded - raw text only',
       };

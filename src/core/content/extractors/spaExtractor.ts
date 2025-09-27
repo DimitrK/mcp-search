@@ -452,9 +452,22 @@ export async function extractWithSpa(
         // Apply CSS cleaning to the extracted text content in Node.js context
         const cleanedTextContent = cleanRenderedCssFromText(extractedData.textContent);
 
+        // For SPA, we don't have clean HTML structure, so markdown is the same as cleaned text
+        // TODO: Future enhancement could capture DOM structure from browser for better markdown
+        const markdownContent = cleanedTextContent;
+        const semanticInfo = {
+          headings: [],
+          codeBlocks: [],
+          lists: [],
+          wordCount: cleanedTextContent.split(/\s+/).length,
+          characterCount: cleanedTextContent.length,
+        };
+
         const result: ExtractionResult = {
           ...extractedData,
           textContent: cleanedTextContent,
+          markdownContent,
+          semanticInfo,
           extractionMethod: 'browser',
           excerpt: extractedData.excerpt,
           note: 'Content extracted using browser rendering for JavaScript-heavy page',

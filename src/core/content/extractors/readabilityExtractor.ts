@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import type { ExtractionResult, ExtractorOptions } from '../types/extraction';
 import { HEADING_SELECTORS, ALL_NON_TEXTUAL_SELECTORS } from './selectors';
 import { createChildLogger, withTiming } from '../../../utils/logger';
+import { markdownConverter } from './markdownConverter';
 
 export async function extractWithReadability(
   html: string,
@@ -77,11 +78,17 @@ export async function extractWithReadability(
         return null;
       }
 
+      // Generate markdown from readability content
+      const markdownContent = markdownConverter.convertToMarkdown(article.content || '');
+      const semanticInfo = markdownConverter.extractSemanticInfo(markdownContent);
+
       const result = {
         title: article.title || originalTitle || undefined,
         textContent: article.textContent.trim(),
+        markdownContent,
         excerpt: article.excerpt || undefined,
         sectionPaths,
+        semanticInfo,
         byline: article.byline || undefined,
         lang,
         extractionMethod: 'readability' as const,

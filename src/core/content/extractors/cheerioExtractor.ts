@@ -9,6 +9,7 @@ import {
   ALL_NON_TEXTUAL_SELECTORS,
 } from './selectors';
 import { createChildLogger, withTiming } from '../../../utils/logger';
+import { markdownConverter } from './markdownConverter';
 
 export async function extractWithCheerio(
   html: string,
@@ -82,14 +83,19 @@ export async function extractWithCheerio(
       'Targeted content elements'
     );
 
-    // Extract text content and fix missing spaces between words
+    // Generate markdown from cleaned HTML (preserves semantic structure)
+    const contentHtml = contentElement.html() || '';
+    const markdownContent = markdownConverter.convertToMarkdown(contentHtml);
+    const semanticInfo = markdownConverter.extractSemanticInfo(markdownContent);
+
+    // Extract plain text for backward compatibility
     const rawText = contentElement.text();
     const textContent = rawText
       .replace(/([α-ωa-z0-9])([Α-ΩA-Z])/g, '$1 $2') // Any lowercase/digit followed by uppercase
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Extract section paths from headings
+    // Extract section paths from headings (enhanced with semantic info)
     const sectionPaths = extractSectionPaths($, contentElement);
 
     const title = $('title').text().trim() || undefined;
@@ -98,8 +104,10 @@ export async function extractWithCheerio(
     const result = {
       title,
       textContent,
+      markdownContent,
       excerpt,
       sectionPaths,
+      semanticInfo,
       byline: undefined, // Cheerio doesn't have sophisticated byline detection
       lang,
       extractionMethod: 'cheerio' as const,
@@ -111,11 +119,15 @@ export async function extractWithCheerio(
         hasTitle: !!result.title,
         hasExcerpt: !!result.excerpt,
         contentLength: result.textContent.length,
+        markdownLength: result.markdownContent.length,
         sectionCount: result.sectionPaths.length,
+        headingsCount: result.semanticInfo?.headings.length || 0,
+        codeBlocksCount: result.semanticInfo?.codeBlocks.length || 0,
+        listsCount: result.semanticInfo?.lists.length || 0,
         language: result.lang,
         contentSelector,
       },
-      'Cheerio extraction completed successfully'
+      'Cheerio extraction completed successfully with markdown conversion'
     );
 
     return result;
