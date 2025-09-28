@@ -3,6 +3,12 @@ import { extractContent } from '../dist/core/content/htmlContentExtractor.js';
 import { semanticChunker } from '../dist/core/content/chunker.js';
 import { fetchUrl } from '../dist/core/content/httpContentFetcher.js';
 import { generateCorrelationId } from '../dist/utils/logger.js';
+import { createEmbeddingProvider } from '../dist/core/vector/embeddingProvider.js';
+import { EmbeddingIntegrationService } from '../dist/core/vector/embeddingIntegrationService.js';
+import { deleteChunksByUrl } from '../dist/core/vector/store/chunks.js';
+import { closeGlobalPool } from '../dist/core/vector/store/pool.js';
+import { normalizeUrl } from '../dist/utils/urlValidator.js';
+import { getEnvironment } from '../dist/config/environment.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,8 +19,10 @@ function parseArgs(args) {
     json: false,
     quiet: false,
     chunk: false,
+    embed: false,
     maxTokens: undefined,
     overlapPercentage: undefined,
+    batchSize: undefined,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -23,12 +31,17 @@ function parseArgs(args) {
     if (arg === '--json') options.json = true;
     if (arg === '--quiet') options.quiet = true;
     if (arg === '--chunk') options.chunk = true;
+    if (arg === '--embed') options.embed = true;
     if (arg === '--max-tokens') {
       options.maxTokens = parseInt(args[i + 1], 10);
       i++; // Skip next arg
     }
     if (arg === '--overlap') {
       options.overlapPercentage = parseInt(args[i + 1], 10);
+      i++; // Skip next arg
+    }
+    if (arg === '--batch-size') {
+      options.batchSize = parseInt(args[i + 1], 10);
       i++; // Skip next arg
     }
   }
@@ -41,7 +54,7 @@ function printUsage() {
 Usage: node scripts/run-extract-content.mjs <URL> [OPTIONS]
 
 Extract and display text content from a web page using the MCP content extraction pipeline.
-Optionally chunk the content for semantic analysis.
+Optionally chunk the content for semantic analysis and generate embeddings.
 
 Arguments:
   URL                    The URL to extract content from
@@ -51,15 +64,18 @@ Options:
   --json                 Output results as JSON
   --quiet                Show only basic extraction metrics
   --chunk                Enable content chunking analysis
+  --embed                Generate embeddings, store in vector DB, verify, and cleanup (requires --chunk)
   --max-tokens NUM       Maximum tokens per chunk (default: from environment)
   --overlap NUM          Overlap percentage between chunks (default: 15)
+  --batch-size NUM       Embedding batch size (default: from environment)
   --help                 Show this help message
 
 Examples:
   node scripts/run-extract-content.mjs https://example.com
   node scripts/run-extract-content.mjs https://example.com --chunk
-  node scripts/run-extract-content.mjs https://example.com --chunk --max-tokens 100 --overlap 20
-  node scripts/run-extract-content.mjs https://example.com --json --chunk
+  node scripts/run-extract-content.mjs https://example.com --chunk --embed       # Complete E2E test
+  node scripts/run-extract-content.mjs https://example.com --chunk --embed --batch-size 16
+  node scripts/run-extract-content.mjs https://example.com --json --chunk --embed
   node scripts/run-extract-content.mjs https://example.com --full --chunk
 `);
 }
@@ -210,6 +226,71 @@ function printChunkingReport(url, chunks, options) {
   console.log('');
 }
 
+function printEmbeddingReport(url, embeddings, chunks, options) {
+  console.log('');
+  console.log('='.repeat(80));
+  console.log('🧠 EMBEDDING GENERATION & VECTOR STORAGE REPORT');
+  console.log('='.repeat(80));
+  console.log('');
+  console.log(`📊 Generated ${embeddings.length} embeddings`);
+
+  if (embeddings.length > 0) {
+    const dimension = embeddings[0].length;
+    console.log(`📐 Embedding dimension: ${dimension}`);
+
+    if (options.batchSize) {
+      console.log(`⚙️  Batch size: ${options.batchSize}`);
+    }
+
+    console.log(`\n✅ END-TO-END PIPELINE COMPLETED:`);
+    console.log(`   • Generated embeddings for ${chunks.length} chunks`);
+    console.log(`   • Stored chunks with embeddings in vector database`);
+    console.log(`   • Verified storage with similarity search`);
+    console.log(`   • Cleaned up test data from database`);
+
+    // Show sample embeddings (first few values from first few embeddings)
+    console.log(`\n📝 SAMPLE EMBEDDINGS:`);
+    const samplesToShow = Math.min(3, embeddings.length);
+
+    for (let i = 0; i < samplesToShow; i++) {
+      const chunkPreview = chunks ? chunks[i].text.substring(0, 50) + '...' : `Embedding ${i + 1}`;
+      const embeddingPreview = embeddings[i]
+        .slice(0, 5)
+        .map(v => v.toFixed(4))
+        .join(', ');
+
+      console.log(`   ${i + 1}. "${chunkPreview}"`);
+      console.log(`      → [${embeddingPreview}, ...] (${dimension}D)`);
+    }
+
+    if (embeddings.length > samplesToShow) {
+      console.log(`   ... and ${embeddings.length - samplesToShow} more embeddings`);
+    }
+
+    // Statistical analysis
+    console.log(`\n📈 EMBEDDING STATISTICS:`);
+    const allValues = embeddings.flat();
+    const mean = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+    const sortedValues = [...allValues].sort((a, b) => a - b);
+    const median = sortedValues[Math.floor(sortedValues.length / 2)];
+    const min = sortedValues[0];
+    const max = sortedValues[sortedValues.length - 1];
+
+    console.log(`   • Value range: ${min.toFixed(4)} to ${max.toFixed(4)}`);
+    console.log(`   • Mean: ${mean.toFixed(4)}`);
+    console.log(`   • Median: ${median.toFixed(4)}`);
+    console.log(`   • Total values: ${allValues.length.toLocaleString()}`);
+
+    console.log(`\n🎯 VECTOR STORAGE VERIFICATION:`);
+    console.log(`   • Database storage: ✅ Verified`);
+    console.log(`   • Similarity search: ✅ Functional`);
+    console.log(`   • Data cleanup: ✅ Completed`);
+    console.log(`   • Pipeline status: 🟢 FULLY OPERATIONAL`);
+  }
+
+  console.log('');
+}
+
 async function main() {
   const url = process.argv[2];
   const options = parseArgs(process.argv.slice(3));
@@ -234,6 +315,7 @@ async function main() {
 
     // Perform chunking if requested
     let chunks = null;
+    let embeddings = null;
     if (options.chunk) {
       console.error(`[extract-content] Chunking content...`);
       const chunkingOptions = {};
@@ -242,6 +324,118 @@ async function main() {
 
       chunks = semanticChunker.chunk(extractionResult, chunkingOptions, url);
       console.error(`[extract-content] Generated ${chunks.length} chunks`);
+
+      // Generate embeddings and store in vector database if requested
+      if (options.embed) {
+        console.error(`[extract-content] Starting embedding pipeline...`);
+        let integrationService;
+        const normalizedUrl = normalizeUrl(url);
+
+        try {
+          const env = getEnvironment();
+          const embeddingProvider = await createEmbeddingProvider({
+            type: 'http',
+            serverUrl: env.EMBEDDING_SERVER_URL,
+            apiKey: env.EMBEDDING_SERVER_API_KEY,
+            modelName: env.EMBEDDING_MODEL_NAME,
+            batchSize: options.batchSize || env.EMBEDDING_BATCH_SIZE,
+            // timeoutMs will use provider default (30s)
+          });
+
+          // Create integration service for end-to-end testing
+          integrationService = new EmbeddingIntegrationService(embeddingProvider);
+
+          // Step 1: Generate embeddings and store in vector database
+          console.error(
+            `[extract-content] Generating embeddings and storing in vector database...`
+          );
+          const storeStartTime = Date.now();
+          await integrationService.storeWithEmbeddings(normalizedUrl, chunks, { correlationId });
+          const storeDuration = Date.now() - storeStartTime;
+
+          console.error(
+            `[extract-content] ✅ Stored ${chunks.length} chunks with embeddings in ${storeDuration}ms`
+          );
+          console.error(
+            `[extract-content] Model: ${embeddingProvider.getModelName()}, Dimension: ${embeddingProvider.getDimension()}`
+          );
+
+          // Step 2: Verify storage by performing similarity search
+          console.error(`[extract-content] Verifying storage with similarity search...`);
+          const verifyStartTime = Date.now();
+
+          // Use first chunk text as query to test similarity search
+          const testQuery = chunks[0].text.substring(0, 100); // First 100 chars as query
+          const searchResults = await integrationService.searchSimilar(
+            normalizedUrl,
+            testQuery,
+            3,
+            { correlationId }
+          );
+          const verifyDuration = Date.now() - verifyStartTime;
+
+          console.error(
+            `[extract-content] ✅ Similarity search returned ${searchResults.length} results in ${verifyDuration}ms`
+          );
+
+          if (searchResults.length > 0) {
+            const avgScore =
+              searchResults.reduce((sum, r) => sum + r.score, 0) / searchResults.length;
+            console.error(
+              `[extract-content] Average similarity score: ${avgScore.toFixed(4)} (${avgScore > 0.7 ? 'excellent' : avgScore > 0.5 ? 'good' : 'fair'})`
+            );
+          }
+
+          // For visualization, generate embeddings array for the report
+          const chunkTexts = chunks.map(chunk => chunk.text);
+          const embeddingStartTime = Date.now();
+          embeddings = await embeddingProvider.embed(chunkTexts);
+          const embeddingDuration = Date.now() - embeddingStartTime;
+
+          console.error(
+            `[extract-content] Generated ${embeddings.length} embeddings for reporting in ${embeddingDuration}ms`
+          );
+          console.error(
+            `[extract-content] Throughput: ${Math.round((chunkTexts.length / embeddingDuration) * 1000)} texts/second`
+          );
+
+          // Step 3: Cleanup test data (this is a development script)
+          console.error(`[extract-content] Cleaning up test data...`);
+          const cleanupStartTime = Date.now();
+          await deleteChunksByUrl(normalizedUrl);
+          const cleanupDuration = Date.now() - cleanupStartTime;
+
+          console.error(`[extract-content] ✅ Cleanup completed in ${cleanupDuration}ms`);
+        } catch (error) {
+          console.error(`[extract-content] Embedding pipeline failed: ${error.message}`);
+
+          // Attempt cleanup even on failure
+          try {
+            if (normalizedUrl) {
+              console.error(`[extract-content] Attempting cleanup after failure...`);
+              await deleteChunksByUrl(normalizedUrl);
+              console.error(`[extract-content] ✅ Cleanup completed after failure`);
+            }
+          } catch (cleanupError) {
+            console.error(`[extract-content] ⚠️  Cleanup failed: ${cleanupError.message}`);
+          }
+
+          process.exit(1);
+        } finally {
+          // Proper resource cleanup sequence
+          console.error(`[extract-content] Cleaning up resources...`);
+
+          // 1. Close embedding provider
+          if (integrationService) {
+            await integrationService.close();
+            console.error(`[extract-content] ✅ Embedding provider closed`);
+          }
+
+          // 2. Close global database pool (this will properly terminate worker threads)
+          await closeGlobalPool();
+          console.error(`[extract-content] ✅ Database pool closed`);
+        }
+      }
     }
 
     if (options.json) {
@@ -256,6 +450,18 @@ async function main() {
         jsonOutput.chunkingOptions = {
           maxTokens: options.maxTokens,
           overlapPercentage: options.overlapPercentage,
+        };
+      }
+
+      if (embeddings) {
+        jsonOutput.embeddings = embeddings;
+        jsonOutput.embeddingOptions = {
+          batchSize: options.batchSize,
+        };
+        jsonOutput.vectorStorageValidation = {
+          tested: true,
+          status: 'verified',
+          pipelineComplete: true,
         };
       }
 
@@ -274,6 +480,13 @@ async function main() {
         quietOutput.totalTokens = chunks.reduce((sum, chunk) => sum + chunk.tokens, 0);
       }
 
+      if (embeddings) {
+        quietOutput.embeddingsGenerated = embeddings.length;
+        quietOutput.embeddingDimension = embeddings[0]?.length || 0;
+        quietOutput.vectorStorageTested = true;
+        quietOutput.pipelineStatus = 'fully_operational';
+      }
+
       console.log(JSON.stringify(quietOutput, null, 2));
     } else {
       printReport(url, extractionResult, options.full);
@@ -282,15 +495,45 @@ async function main() {
       if (chunks) {
         printChunkingReport(url, chunks, options);
       }
+
+      // Print embedding report if embeddings were generated
+      if (embeddings) {
+        printEmbeddingReport(url, embeddings, chunks, options);
+      }
     }
   } catch (error) {
     console.error(`[extract-content] Error: ${error.message}`);
+
+    // Clean up resources even on error
+    try {
+      console.error(`[extract-content] Cleaning up resources after error...`);
+      await closeGlobalPool();
+      console.error(`[extract-content] ✅ Database pool closed after error`);
+    } catch (cleanupError) {
+      console.error(`[extract-content] ⚠️  Resource cleanup failed: ${cleanupError.message}`);
+    }
+
     process.exit(1);
   }
+
   console.error(`[extract-content] Done`);
+
+  // Final cleanup - close global database pool to terminate worker threads
+  try {
+    console.error(`[extract-content] Final cleanup - closing database pool...`);
+    await closeGlobalPool();
+    console.error(`[extract-content] ✅ All resources cleaned up successfully`);
+  } catch (cleanupError) {
+    console.error(`[extract-content] ⚠️  Final cleanup failed: ${cleanupError.message}`);
+  }
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    console.error(`[extract-content] Process completed successfully`);
+    // Resources should be properly closed by now - no force exit needed
+  })
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });

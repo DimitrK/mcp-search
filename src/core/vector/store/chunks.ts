@@ -35,25 +35,30 @@ export async function upsertChunks(
       for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
 
-        // Build multi-row VALUES clause with positional parameters
+        // Detect embedding dimension from first chunk in batch
+        const embeddingDim = batch[0]?.embedding?.length || 1536;
+
+        // Build multi-row VALUES clause with array literals instead of parameters
+        // DuckDB has issues with array parameters, so we embed them as literals
         const valuesClauses = batch
-          .map((_, idx) => {
-            const base = idx * 6;
-            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}::FLOAT[1536])`;
+          .map((chunk, idx) => {
+            const base = idx * 5; // Only 5 parameters now (no embedding parameter)
+            const embeddingLiteral = `[${chunk.embedding.join(', ')}]::FLOAT[${embeddingDim}]`;
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, ${embeddingLiteral})`;
           })
           .join(', ');
 
         const sql = `INSERT OR REPLACE INTO chunks(id, url, section_path, text, tokens, embedding)
                      VALUES ${valuesClauses}`;
 
-        // Flatten all parameters for this batch
+        // Flatten all parameters for this batch (no embedding in params now)
         const params = batch.flatMap(c => [
           c.id,
           c.url,
           c.section_path ?? null,
           c.text,
           c.tokens,
-          c.embedding,
+          // embedding is now embedded as literal in SQL
         ]);
 
         await promisifyRunParams(conn, sql, params);
@@ -70,14 +75,15 @@ export async function similaritySearch(
 ): Promise<SimilarChunkRow[]> {
   const pool = await getPool();
   return await pool.withConnection(async conn => {
-    // Use positional parameters for cleaner SQL
+    // Embed array as literal to avoid DuckDB parameter issues with arrays
+    const embeddingLiteral = `[${embedding.join(', ')}]::FLOAT[${dimension}]`;
     const sql = `SELECT id, text, section_path,
-       1 - (embedding <=> $1::FLOAT[${dimension}]) AS score
+       1 - (embedding <=> ${embeddingLiteral}) AS score
      FROM chunks
-     WHERE url = $2
-     ORDER BY embedding <-> $1::FLOAT[${dimension}]
-     LIMIT $3`;
-    const rows = await promisifyAll<SimilarChunkRow>(conn, sql, [embedding, url, limit]);
+     WHERE url = $1
+     ORDER BY embedding <-> ${embeddingLiteral}
+     LIMIT $2`;
+    const rows = await promisifyAll<SimilarChunkRow>(conn, sql, [url, limit]);
     return rows;
   });
 }

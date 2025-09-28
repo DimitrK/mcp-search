@@ -17,6 +17,9 @@ const EnvironmentSchema = z.object({
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
 
+  // Embedding-specific configuration
+  EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(32).default(8),
+
   // Vector DB execution mode
   VECTOR_DB_MODE: z.enum(['inline', 'thread', 'process']).default('inline').optional(),
   VECTOR_DB_RESTART_ON_CRASH: z.union([z.literal('true'), z.literal('false')]).optional(),

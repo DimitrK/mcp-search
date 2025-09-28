@@ -54,14 +54,15 @@ describe('upsertChunks Batch Operations', () => {
 
     const [, sql, params] = mockedPromisifyRunParams.mock.calls[0];
     expect(sql).toContain('INSERT OR REPLACE INTO chunks');
-    expect(sql).toContain('VALUES ($1, $2, $3, $4, $5, $6::FLOAT[1536])');
+    expect(sql).toContain('VALUES ($1, $2, $3, $4, $5,');
+    expect(sql).toContain('::FLOAT[1536])'); // Should contain embedding literal
     expect(params).toEqual([
       'test-1',
       'https://example.com',
       null, // section_path
       'Test content',
       10,
-      chunks[0].embedding,
+      // embedding is now embedded as literal in SQL, not in params
     ]);
   });
 
@@ -92,24 +93,25 @@ describe('upsertChunks Batch Operations', () => {
 
     // Verify multi-row VALUES structure
     expect(sql).toContain('INSERT OR REPLACE INTO chunks');
-    expect(sql).toContain(
-      'VALUES ($1, $2, $3, $4, $5, $6::FLOAT[1536]), ($7, $8, $9, $10, $11, $12::FLOAT[1536])'
-    );
+    expect(sql).toContain('VALUES ($1, $2, $3, $4, $5,'); // First chunk
+    expect(sql).toContain('($6, $7, $8, $9, $10,'); // Second chunk
+    expect(sql).toContain('::FLOAT[1536])'); // Should contain embedding literals
 
-    // Verify all parameters are flattened correctly
+    // Verify all parameters are flattened correctly (no embeddings in params now)
+    expect(params).toHaveLength(10); // 2 chunks × 5 params each (no embedding)
     expect(params).toEqual([
       'test-1',
       'https://example.com',
       null,
       'Content 1',
       5,
-      chunks[0].embedding,
+      // chunk[0].embedding is now embedded as literal in SQL
       'test-2',
       'https://example.com',
       'section-1',
       'Content 2',
       8,
-      chunks[1].embedding,
+      // chunk[1].embedding is now embedded as literal in SQL
     ]);
   });
 
@@ -127,18 +129,18 @@ describe('upsertChunks Batch Operations', () => {
     // Should create 2 batches: 100 + 50
     expect(mockedPromisifyRunParams).toHaveBeenCalledTimes(2);
 
-    // First batch should have 100 chunks = 600 parameters
+    // First batch should have 100 chunks = 500 parameters (no embedding params)
     const firstBatchParams = mockedPromisifyRunParams.mock.calls[0][2];
-    expect(firstBatchParams).toHaveLength(100 * 6);
+    expect(firstBatchParams).toHaveLength(100 * 5);
 
-    // Second batch should have 50 chunks = 300 parameters
+    // Second batch should have 50 chunks = 250 parameters (no embedding params)
     const secondBatchParams = mockedPromisifyRunParams.mock.calls[1][2];
-    expect(secondBatchParams).toHaveLength(50 * 6);
+    expect(secondBatchParams).toHaveLength(50 * 5);
 
     // Verify SQL structure for first batch (100 VALUES clauses)
     const firstBatchSql = mockedPromisifyRunParams.mock.calls[0][1];
     const valuesCount = (firstBatchSql.match(/\$\d+/g) || []).length;
-    expect(valuesCount).toBe(100 * 6); // 100 chunks × 6 parameters each
+    expect(valuesCount).toBe(100 * 5); // 100 chunks × 5 parameters each (no embedding params)
   });
 
   test('exactly 100 chunks creates single batch', async () => {
@@ -155,7 +157,7 @@ describe('upsertChunks Batch Operations', () => {
     expect(mockedPromisifyRunParams).toHaveBeenCalledTimes(1);
 
     const [, , params] = mockedPromisifyRunParams.mock.calls[0];
-    expect(params).toHaveLength(100 * 6);
+    expect(params).toHaveLength(100 * 5); // 5 params per chunk (no embedding)
   });
 
   test('handles null section_path correctly in batches', async () => {
@@ -183,6 +185,6 @@ describe('upsertChunks Batch Operations', () => {
 
     // Verify section_path handling: first has value, second is null
     expect(params[2]).toBe('intro');
-    expect(params[8]).toBe(null); // section_path for second chunk
+    expect(params[7]).toBe(null); // section_path for second chunk (index changed: 5 params per chunk)
   });
 });

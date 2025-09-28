@@ -1,4 +1,4 @@
-import { promisifyConnect, promisifyRun, DuckDbDatabaseLike } from './connection';
+import { promisifyConnect, promisifyRun, promisifyAll, DuckDbDatabaseLike } from './connection';
 
 export async function runSchema(db: DuckDbDatabaseLike): Promise<void> {
   const conn = await promisifyConnect(db);
@@ -34,6 +34,23 @@ export async function runSchema(db: DuckDbDatabaseLike): Promise<void> {
          content_hash TEXT
        );`
     );
+    // Get embedding dimension from meta table, default to 1536 for backward compatibility
+    let embeddingDim = 1536;
+    try {
+      const dimRows = await promisifyAll<{ value: string }>(
+        conn,
+        `SELECT value FROM meta WHERE key='embedding_dim'`
+      );
+      if (dimRows && dimRows.length > 0) {
+        embeddingDim = parseInt(dimRows[0].value, 10);
+      }
+    } catch (e) {
+      // Meta table might not exist yet, use default dimension
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`Using default embedding dimension ${embeddingDim}`);
+      }
+    }
+
     await promisifyRun(
       conn,
       `CREATE TABLE IF NOT EXISTS chunks (
@@ -42,7 +59,7 @@ export async function runSchema(db: DuckDbDatabaseLike): Promise<void> {
          section_path TEXT,
          text TEXT NOT NULL,
          tokens INTEGER NOT NULL,
-         embedding FLOAT[1536],
+         embedding FLOAT[${embeddingDim}],
          created_at TIMESTAMP DEFAULT now(),
          updated_at TIMESTAMP DEFAULT now()
        );`
