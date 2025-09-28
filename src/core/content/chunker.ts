@@ -1,5 +1,5 @@
-import { createHash } from 'crypto';
 import type { ExtractionResult } from './types/extraction';
+import { stableChunkId } from '../../utils/contentHash';
 
 export interface ContentChunk {
   id: string;
@@ -595,12 +595,10 @@ class SemanticChunker {
   }
 
   /**
-   * Generate stable SHA-256 based chunk ID
+   * Generate stable SHA-256 based chunk ID per specification
    */
   private generateChunkId(url: string, sectionPath: string[], text: string): string {
-    const pathString = sectionPath.join('|');
-    const input = `${url}|${pathString}|${text}`;
-    return createHash('sha256').update(input).digest('hex');
+    return stableChunkId(url, sectionPath, text);
   }
 
   /**

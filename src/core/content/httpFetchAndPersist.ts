@@ -1,5 +1,5 @@
 import { fetchUrl } from './httpContentFetcher';
-import { sha256Hex } from './hasher';
+import { sha256Hex } from '../../utils/contentHash';
 import { normalizeUrl } from '../../utils/urlValidator';
 import { getDocument, upsertDocument } from '../vector/store/duckdbVectorStore';
 import { generateCorrelationId } from '../../utils/logger';
