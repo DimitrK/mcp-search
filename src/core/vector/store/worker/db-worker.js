@@ -61,14 +61,12 @@ let conn;
         // Install and load VSS extension (allow_unsigned_extensions set during instance creation)
         await conn.run('INSTALL vss');
         await conn.run('LOAD vss');
-        globalThis.console?.log?.('[DB-WORKER] VSS extension loaded successfully');
+        // VSS extension loaded successfully - no console output to avoid MCP protocol interference
 
         // Note: VSS extension uses table functions (vss_match, array_cosine_similarity)
         // instead of indexes for similarity search. No index creation needed.
-      } catch (e) {
-        globalThis.console?.warn?.(
-          `[DB-WORKER] VSS extension failed to load: ${(e && e.message) || String(e)}`
-        );
+      } catch {
+        // VSS extension failed to load - no console output to avoid MCP protocol interference
       }
       finishInit();
     }

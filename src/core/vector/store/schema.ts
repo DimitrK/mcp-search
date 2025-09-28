@@ -44,7 +44,7 @@ export async function runSchema(db: DuckDbDatabaseLike): Promise<void> {
       if (dimRows && dimRows.length > 0) {
         embeddingDim = parseInt(dimRows[0].value, 10);
       }
-    } catch (e) {
+    } catch {
       // Meta table might not exist yet, use default dimension
       if (process.env.NODE_ENV !== 'test') {
         console.log(`Using default embedding dimension ${embeddingDim}`);

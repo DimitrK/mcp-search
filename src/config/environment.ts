@@ -12,7 +12,7 @@ const EnvironmentSchema = z.object({
 
   // Optional environment variables with defaults
   DATA_DIR: z.string().optional(),
-  SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.72),
+  SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.6),
   EMBEDDING_TOKENS_SIZE: z.coerce.number().int().positive().default(512),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),

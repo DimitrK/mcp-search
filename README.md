@@ -41,7 +41,6 @@ SIMILARITY_THRESHOLD=0.72                # Default: 0.72
 EMBEDDING_TOKENS_SIZE=512               # Default: 512
 REQUEST_TIMEOUT_MS=20000                # Default: 20000
 CONCURRENCY=2                           # Default: 2
-GOOGLE_SAFE_SEARCH=off                  # Default: off (off|moderate|strict)
 ```
 
 ### Playwright (for crawling)

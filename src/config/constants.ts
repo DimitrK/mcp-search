@@ -24,12 +24,6 @@ export const PLAYWRIGHT_WORKER_POOL = {
 
 export const EMBEDDING_BATCH_SIZE = 32;
 
-export const GOOGLE_SAFE_SEARCH_MAPPING = {
-  off: 'off',
-  moderate: 'active',
-  strict: 'active',
-} as const;
-
 export const MCP_TOOL_DESCRIPTIONS = {
   WEB_SEARCH: 'Search the web using Google Custom Search API with support for batch queries',
   READ_FROM_PAGE: 'Extract and search content from web pages with semantic similarity matching',

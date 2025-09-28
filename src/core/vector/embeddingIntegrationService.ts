@@ -3,7 +3,6 @@ import { ensureEmbeddingConfig, upsertChunks, similaritySearch } from './store';
 import type { ContentChunk } from '../content/chunker';
 import type { ChunkRow, SimilarChunkRow } from './store/chunks';
 import { createChildLogger, withTiming, generateCorrelationId } from '../../utils/logger';
-import { EmbeddingError } from '../../mcp/errors';
 
 /**
  * Integration service that connects the embedding provider with vector storage.

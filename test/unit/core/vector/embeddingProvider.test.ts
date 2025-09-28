@@ -7,10 +7,10 @@ import { EmbeddingError } from '../../../../src/mcp/errors';
 
 // Mock the HTTP provider module
 jest.mock('../../../../src/core/vector/providers/httpEmbeddingProvider', () => ({
-  HttpEmbeddingProvider: jest.fn().mockImplementation((config: any) => ({
+  HttpEmbeddingProvider: jest.fn().mockImplementation((config: unknown) => ({
     embed: jest.fn(),
     getDimension: jest.fn(() => 1536), // Auto-detected dimension
-    getModelName: jest.fn(() => config.modelName || 'test-model'),
+    getModelName: jest.fn(() => (config as EmbeddingProviderConfig).modelName || 'test-model'),
     close: jest.fn(),
   })),
 }));
@@ -72,7 +72,7 @@ describe('createEmbeddingProvider', () => {
         type: 'unknown',
         serverUrl: 'https://api.example.com',
         apiKey: 'test-key',
-      } as any;
+      } as EmbeddingProviderConfig & { type: 'unknown' };
 
       await expect(createEmbeddingProvider(config)).rejects.toThrow(
         'Unknown embedding provider type: unknown'
@@ -104,7 +104,7 @@ describe('createEmbeddingProvider', () => {
       const config: EmbeddingProviderConfig = {
         type: 'http',
         // Missing required fields
-      } as any;
+      } as EmbeddingProviderConfig;
 
       await expect(createEmbeddingProvider(config)).rejects.toThrow(
         'serverUrl is required for HTTP embedding provider'
