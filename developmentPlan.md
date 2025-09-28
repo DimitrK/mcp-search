@@ -237,11 +237,11 @@ extractor.extract('<html>...test content...</html>').then(console.log);
 
 ### Acceptance Criteria:
 
-- [ ] Can generate embeddings for text chunks
-- [ ] Batching reduces API calls efficiently
-- [ ] Graceful degradation when embedding service is down
-- [ ] Vector similarity search returns relevant results
-- [ ] Embedding dimensions are validated and consistent
+- [x] Can generate embeddings for text chunks
+- [x] Batching reduces API calls efficiently
+- [x] Graceful degradation when embedding service is down
+- [x] Vector similarity search returns relevant results
+- [x] Embedding dimensions are validated and consistent
 
 ### Verification:
 
@@ -299,12 +299,12 @@ provider.embed(['test text', 'another text']).then(console.log);
 
 ### Acceptance Criteria:
 
-- [ ] Can fetch, process, and search content from URLs
-- [ ] Returns semantically relevant chunks for queries
-- [ ] Caching prevents unnecessary re-processing
-- [ ] `forceRefresh` bypasses cache correctly
-- [ ] Graceful degradation when services are unavailable
-- [ ] All error scenarios are handled properly
+- [x] Can fetch, process, and search content from URLs
+- [x] Returns semantically relevant chunks for queries
+- [x] Caching prevents unnecessary re-processing
+- [x] `forceRefresh` bypasses cache correctly
+- [x] Graceful degradation when services are unavailable
+- [x] All error scenarios are handled properly
 
 ### Verification:
 
