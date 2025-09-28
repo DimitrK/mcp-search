@@ -510,25 +510,19 @@ export async function extractWithSpa(
 
         return result;
       } finally {
-        // Always clean up browser resources with timeout
+        // Always clean up browser resources properly
         logger.debug({ event: 'spa_browser_cleanup' }, 'Cleaning up browser resources');
         try {
-          await Promise.race([
-            (async () => {
-              await context.close();
-              await browser.close();
-            })(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Browser cleanup timeout')), 5000)
-            ),
-          ]);
+          // Clean up browser resources sequentially - context first, then browser
+          await context.close();
+          await browser.close();
         } catch (cleanupError) {
           logger.warn(
             {
-              event: 'spa_cleanup_timeout',
+              event: 'spa_cleanup_failed',
               error: cleanupError instanceof Error ? cleanupError.message : 'Unknown cleanup error',
             },
-            'Browser cleanup timed out - resources may not be fully released'
+            'Browser cleanup failed - attempting forced cleanup'
           );
           // Force close if possible
           try {

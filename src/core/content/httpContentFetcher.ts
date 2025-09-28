@@ -98,34 +98,25 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
 
     log.debug({}, 'Both timeouts cleared - body processing can proceed without abort');
 
-    // Close client to avoid resource leaks (with timeout to prevent hanging)
-    log.debug({}, 'About to close undici client...');
-    if (client && 'close' in client && typeof client.close === 'function') {
-      try {
-        // Timeout the client.close() operation to prevent indefinite hanging
-        await Promise.race([
-          client.close(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Client close timeout')), 2000)
-          ),
-        ]);
-        log.debug({}, 'Undici client closed successfully');
-      } catch (err) {
-        log.warn(
-          { error: (err as Error).message },
-          'Client close failed or timed out - continuing anyway'
-        );
-        // Don't throw - we have our response, client cleanup is not critical
-      }
-    } else {
-      log.debug({}, 'No client to close or client has no close method');
-    }
-
     const statusCode = res.statusCode;
     const etag = (res.headers?.etag as string | undefined) ?? undefined;
     const lastModified = (res.headers?.['last-modified'] as string | undefined) ?? undefined;
 
     if (statusCode === 304) {
+      // For 304, there's no body to process, so we can close the client now
+      log.debug({}, 'No body for 304 response, closing undici client...');
+      if (client && 'close' in client && typeof client.close === 'function') {
+        try {
+          await client.close();
+          log.debug({}, 'Undici client closed successfully after 304 response');
+        } catch (err) {
+          log.warn(
+            { error: (err as Error).message },
+            'Client close failed after 304 response - continuing anyway'
+          );
+          // Don't throw - we have our response, client cleanup is not critical
+        }
+      }
       return { statusCode, bodyText: '', etag, lastModified, notModified: true };
     }
 
@@ -164,6 +155,23 @@ export async function fetchUrl(url: string, options: FetchOptions = {}): Promise
     log.debug({ textLength: bodyText.length }, 'UTF-8 string conversion completed');
     if (statusCode >= 400) {
       throw new NetworkError('HTTP error', statusCode);
+    }
+
+    // NOW it's safe to close the client - body has been fully processed
+    log.debug({}, 'Body processing complete, closing undici client...');
+    if (client && 'close' in client && typeof client.close === 'function') {
+      try {
+        await client.close();
+        log.debug({}, 'Undici client closed successfully after body processing');
+      } catch (err) {
+        log.warn(
+          { error: (err as Error).message },
+          'Client close failed after body processing - continuing anyway'
+        );
+        // Don't throw - we have our data, client cleanup is not critical
+      }
+    } else {
+      log.debug({}, 'No client to close or client has no close method');
     }
 
     return { statusCode, bodyText, etag, lastModified };

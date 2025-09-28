@@ -125,9 +125,20 @@ async function ensureInitialized() {
 
   initPromise = new Promise<boolean>((resolve, reject) => {
     const w = getWorker() as unknown as MinimalMessenger;
+
+    // Worker initialization can legitimately take time due to:
+    // - DuckDB database file creation/opening
+    // - VSS extension download and compilation
+    // - System resource constraints
+    const WORKER_INIT_TIMEOUT_MS = parseInt(process.env.WORKER_INIT_TIMEOUT_MS || '20000', 10);
+
     const timeout = setTimeout(() => {
-      reject(new Error('DB worker initialization timed out'));
-    }, 20000);
+      reject(
+        new Error(
+          `DB worker initialization timed out after ${WORKER_INIT_TIMEOUT_MS}ms. This may indicate network issues (VSS extension download), file system problems, or system resource constraints.`
+        )
+      );
+    }, WORKER_INIT_TIMEOUT_MS);
 
     const onInit = (msg: { type: string; error?: string }) => {
       if (msg.type === 'init-success') {
@@ -182,18 +193,26 @@ export async function closeDb() {
     // Worker might already be dead, continue with cleanup
   }
 
-  // Wait for inflight operations to complete (with timeout)
-  const inflightPromise = waitForInflightOperations(5000);
+  // Wait for inflight operations to complete (no timeout needed with sequential logic)
+  const inflightPromise = waitForInflightOperations();
 
-  // Terminate worker after inflight operations or timeout
-  if (worker instanceof Worker) {
-    await Promise.race([inflightPromise, worker.terminate()]);
-  } else {
-    try {
-      worker.kill('SIGTERM');
-      await Promise.race([inflightPromise, new Promise(resolve => setTimeout(resolve, 1000))]);
-    } catch {
-      // ignore
+  // Wait for inflight operations to complete, THEN terminate worker
+  try {
+    await inflightPromise; // Wait for operations to complete first
+
+    if (worker instanceof Worker) {
+      await worker.terminate(); // Now safely terminate the worker
+    } else {
+      worker.kill('SIGTERM'); // Send termination signal to child process
+      // No arbitrary delay needed - SIGTERM should handle it
+    }
+  } catch (error) {
+    // If inflight operations fail, force terminate anyway
+    console.warn('Inflight operations failed during cleanup, force terminating worker:', error);
+    if (worker instanceof Worker) {
+      await worker.terminate();
+    } else {
+      worker.kill('SIGKILL'); // Force kill if SIGTERM didn't work
     }
   }
 
@@ -206,7 +225,7 @@ export async function closeDb() {
   initPromise = null;
 }
 
-async function waitForInflightOperations(timeoutMs: number): Promise<void> {
+async function waitForInflightOperations(): Promise<void> {
   if (inflight.size === 0) return;
 
   return new Promise<void>(resolve => {
@@ -216,11 +235,8 @@ async function waitForInflightOperations(timeoutMs: number): Promise<void> {
         resolve();
       }
     }, 100);
-
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      resolve();
-    }, timeoutMs);
+    // No timeout needed - operations will complete naturally
+    // If they don't, that's a different bug to investigate
   });
 }
 
