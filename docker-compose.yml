@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  mcp-search:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-search
+    restart: unless-stopped
+    environment:
+      # Required environment variables (override in .env file)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
+      - EMBEDDING_SERVER_URL=${EMBEDDING_SERVER_URL}
+      - EMBEDDING_SERVER_API_KEY=${EMBEDDING_SERVER_API_KEY}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME}
+      
+      # Optional configuration
+      - DATA_DIR=/app/data
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.6}
+      - EMBEDDING_TOKENS_SIZE=${EMBEDDING_TOKENS_SIZE:-512}
+      - REQUEST_TIMEOUT_MS=${REQUEST_TIMEOUT_MS:-20000}
+      - CONCURRENCY=${CONCURRENCY:-2}
+      - NODE_ENV=${NODE_ENV:-development}
+      
+      # Vector DB configuration
+      - VECTOR_DB_MODE=${VECTOR_DB_MODE:-thread}
+      - VECTOR_DB_RESTART_ON_CRASH=${VECTOR_DB_RESTART_ON_CRASH:-false}
+    
+    volumes:
+      # Persist database and logs (bind mount for development)
+      - ./data:/app/data
+      
+      # Optional: mount config files
+      # - ./config:/app/config:ro
+      
+    # Expose stdio for MCP communication
+    stdin_open: true
+    tty: true
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "dist/cli.js", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits (adjust based on needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Optional: Add an embedding server for local development
+  # embedding-server:
+  #   image: ollama/ollama:latest
+  #   container_name: mcp-search-embeddings
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_ORIGINS=*
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+# volumes:
+  # Development uses bind mounts, production uses named volumes
+  # ollama_data:
+  #   driver: local
+
+networks:
+  default:
+    name: mcp-search-network

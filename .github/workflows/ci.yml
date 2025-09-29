@@ -1,31 +1,313 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [master]
+    branches: [main, master, develop]
+    tags: ['v*']
   pull_request:
-    branches: [master]
+    branches: [main, master, develop]
+  schedule:
+    # Weekly dependency audit
+    - cron: '0 2 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  FORCE_COLOR: 1
 
 jobs:
-  build:
+  # 🔍 Code Quality & Security
+  lint-and-typecheck:
+    name: 📋 Code Quality
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [20.x]
-
+    
     steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: 🔧 Install dependencies
+        run: npm ci
+        
+      - name: 🎨 Check formatting
+        run: npm run format:check
+        
+      - name: 🔍 Run ESLint
+        run: npm run lint
+        
+      - name: 🔎 TypeScript check
+        run: npm run typecheck
+
+  # 🛡️ Security Scanning
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: 🔧 Install dependencies
+        run: npm ci
+        
+      - name: 🕵️ NPM Audit
+        run: npm audit --audit-level moderate
+        continue-on-error: true
+        
+      - name: 🔍 Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+          
+      - name: 🏗️ Build for CodeQL
+        run: npm run build
+        
+      - name: 🔎 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  # 🧪 Comprehensive Testing Matrix
+  test-matrix:
+    name: 🧪 Tests (Node ${{ matrix.node-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # Add performance testing on Ubuntu only
+          - node-version: '20.x'
+            os: ubuntu-latest
+            run-performance: true
+            
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-      - name: Install dependencies
+          
+      - name: 🔧 Install dependencies
         run: npm ci
-      - name: Run linter
-        run: npm run lint
-      - name: Build project
-        run: npm run build --if-present
-      - name: Run tests
-        run: npm test
+        
+      - name: 🏗️ Build project
+        run: npm run build
+        
+      - name: 🧪 Run unit tests
+        run: npm run test:unit
+        
+      - name: 🔗 Run integration tests
+        run: npm run test:integration
+        env:
+          # Mock environment for tests
+          GOOGLE_API_KEY: test-key
+          GOOGLE_SEARCH_ENGINE_ID: test-engine
+          EMBEDDING_SERVER_URL: http://localhost:3000
+          EMBEDDING_SERVER_API_KEY: test-key
+          EMBEDDING_MODEL_NAME: test-model
+          
+      - name: ⚡ Run performance tests
+        if: matrix.run-performance
+        run: npm run test:performance
+        env:
+          GOOGLE_API_KEY: test-key
+          GOOGLE_SEARCH_ENGINE_ID: test-engine
+          EMBEDDING_SERVER_URL: http://localhost:3000
+          EMBEDDING_SERVER_API_KEY: test-key
+          EMBEDDING_MODEL_NAME: test-model
+        
+      - name: 📊 Generate coverage report
+        if: matrix.node-version == '20.x' && matrix.os == 'ubuntu-latest'
+        run: npm run test:coverage
+        env:
+          GOOGLE_API_KEY: test-key
+          GOOGLE_SEARCH_ENGINE_ID: test-engine
+          EMBEDDING_SERVER_URL: http://localhost:3000
+          EMBEDDING_SERVER_API_KEY: test-key
+          EMBEDDING_MODEL_NAME: test-model
+          
+      - name: 📈 Upload coverage to Codecov
+        if: matrix.node-version == '20.x' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info
+          fail_ci_if_error: false
+          verbose: true
+
+  # 🐳 Docker Build & Test
+  docker-test:
+    name: 🐳 Docker Build
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck]
+    
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: 🏗️ Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: mcp-search:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: 🔍 Test Docker image
+        run: |
+          docker run --rm \
+            -e GOOGLE_API_KEY=test \
+            -e GOOGLE_SEARCH_ENGINE_ID=test \
+            -e EMBEDDING_SERVER_URL=http://test \
+            -e EMBEDDING_SERVER_API_KEY=test \
+            -e EMBEDDING_MODEL_NAME=test \
+            mcp-search:test health
+
+  # 📦 NPM Publish (on tags)
+  publish-npm:
+    name: 📦 Publish to NPM
+    runs-on: ubuntu-latest
+    needs: [test-matrix, security-scan, docker-test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+          
+      - name: 🔧 Install dependencies
+        run: npm ci
+        
+      - name: 🏗️ Build project
+        run: npm run build
+        
+      - name: 🚀 Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # 🐳 Docker Publish (on tags)
+  publish-docker:
+    name: 🐳 Publish Docker Image
+    runs-on: ubuntu-latest
+    needs: [test-matrix, security-scan, docker-test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: 🔐 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: your-username/mcp-search
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            
+      - name: 🚀 Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # 🎉 Create GitHub Release
+  create-release:
+    name: 🎉 Create Release
+    runs-on: ubuntu-latest
+    needs: [publish-npm, publish-docker]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 📝 Generate changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.3.1
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🎉 Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## 🚀 What's New
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## 📦 Installation
+            
+            ```bash
+            npm install -g mcp-search@${{ github.ref_name }}
+            ```
+            
+            ## 🐳 Docker
+            
+            ```bash
+            docker pull your-username/mcp-search:${{ github.ref_name }}
+            ```
+            
+            ## 📋 Full Changelog
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.tag }}...${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

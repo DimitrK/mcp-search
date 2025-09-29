@@ -1,0 +1,54 @@
+version: '3.8'
+
+# Production overrides for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  mcp-search:
+    # Use production image from registry instead of building locally
+    # image: your-username/mcp-search:latest
+    
+    # Production-specific environment
+    environment:
+      - NODE_ENV=production
+      - DATA_DIR=/app/data
+      
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      
+      # Restart policy for production
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Remove development mounts and expose stdio
+    stdin_open: false
+    tty: false
+    
+    # Use named volume instead of bind mount for better performance
+    volumes:
+      - mcp_production_data:/app/data
+
+volumes:
+  mcp_production_data:
+    driver: local
