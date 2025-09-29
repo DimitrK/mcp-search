@@ -29,6 +29,9 @@ npm install -g mcp-search
 
 # Or local installation
 npm install mcp-search
+
+# Additionally install Playwright with chromium browser. This is a peer dependency that allows the mcp to crawl SPAs
+npx playwright install --with-deps chromium
 ```
 
 ### Docker Installation
