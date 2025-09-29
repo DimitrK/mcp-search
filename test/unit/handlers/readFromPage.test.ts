@@ -78,7 +78,7 @@ describe('Read From Page Handler', () => {
   beforeAll(() => {
     // Set required environment variables
     process.env.EMBEDDING_SERVER_URL = 'http://localhost:8080';
-    process.env.EMBEDDING_SERVER_API_KEY = 'test-key';  
+    process.env.EMBEDDING_SERVER_API_KEY = 'test-key';
     process.env.EMBEDDING_MODEL_NAME = 'test-model';
     process.env.SIMILARITY_THRESHOLD = '0.7';
   });
@@ -86,57 +86,55 @@ describe('Read From Page Handler', () => {
   test('should parse valid readFromPage input and return structured response', async () => {
     const validInput = {
       url: 'https://example.com',
-      query: 'search content'
+      query: 'search content',
     };
 
     const result = await handleReadFromPage(validInput, mockLogger);
-    
+
     // Should return proper MCP response structure
     expect(result).toHaveProperty('content');
-    expect(result.content).toMatchObject({
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toHaveProperty('type', 'text');
+    expect(result.content[0]).toHaveProperty('text');
+
+    // Parse the JSON content to verify structure
+    const parsedResponse = JSON.parse(result.content[0].text);
+    expect(parsedResponse).toMatchObject({
       url: validInput.url,
       lastCrawled: expect.any(String),
       queries: expect.arrayContaining([
         expect.objectContaining({
           query: validInput.query,
-          results: expect.any(Array)
-        })
-      ])
+          results: expect.any(Array),
+        }),
+      ]),
     });
   });
 
   test('should reject invalid URL', async () => {
     const invalidInput = {
       url: 'not-a-url',
-      query: 'search content'
+      query: 'search content',
     };
 
-    await expect(handleReadFromPage(invalidInput, mockLogger))
-      .rejects
-      .toThrow(); // Should fail URL validation
+    await expect(handleReadFromPage(invalidInput, mockLogger)).rejects.toThrow(); // Should fail URL validation
   });
 
   test('should handle missing required fields', async () => {
     const missingUrl = {
-      query: 'search content'
+      query: 'search content',
     };
 
-    await expect(handleReadFromPage(missingUrl, mockLogger))
-      .rejects
-      .toThrow(); // Should fail validation
+    await expect(handleReadFromPage(missingUrl, mockLogger)).rejects.toThrow(); // Should fail validation
 
     const missingQuery = {
-      url: 'https://example.com'
+      url: 'https://example.com',
     };
 
-    await expect(handleReadFromPage(missingQuery, mockLogger))
-      .rejects
-      .toThrow(); // Should fail validation
+    await expect(handleReadFromPage(missingQuery, mockLogger)).rejects.toThrow(); // Should fail validation
   });
 
   test('should handle undefined input', async () => {
-    await expect(handleReadFromPage(undefined, mockLogger))
-      .rejects
-      .toThrow(); // Should fail validation
+    await expect(handleReadFromPage(undefined, mockLogger)).rejects.toThrow(); // Should fail validation
   });
 });

@@ -27,7 +27,7 @@ describe('Environment Configuration', () => {
   test('should use default values for optional variables', () => {
     const env = getEnvironment();
 
-    expect(env.SIMILARITY_THRESHOLD).toBe(0.72);
+    expect(env.SIMILARITY_THRESHOLD).toBe(0.6);
     expect(env.EMBEDDING_TOKENS_SIZE).toBe(512);
     expect(env.REQUEST_TIMEOUT_MS).toBe(20000);
     expect(env.CONCURRENCY).toBe(2);
