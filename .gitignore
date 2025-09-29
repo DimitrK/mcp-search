@@ -73,3 +73,6 @@ test-results/
 playwright-report/
 .env
 .dist-old/
+# Docker development data
+data/
+!data/.gitkeep
