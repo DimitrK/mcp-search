@@ -33,6 +33,8 @@ This script will:
 docker build -t mcp-search:test .
 ```
 
+**Note:** First build takes ~2-3 minutes due to Playwright browser download. Subsequent builds are faster as browser binaries are cached.
+
 #### Step 2: Test Health Check
 
 ```bash
@@ -116,8 +118,8 @@ docker-compose up --build
 
 ## 📊 Performance Expectations
 
-- **Build time**: 2-5 minutes (first time), < 1 minute (cached)
-- **Image size**: 200-400MB (optimized multi-stage)
+- **Build time**: 3-6 minutes (first time, includes Playwright browser download), 1-2 minutes (cached)
+- **Image size**: 400-600MB (includes Playwright browser binaries)
 - **Startup time**: < 10 seconds
 - **Memory usage**: 256-512MB (depending on workload)
 - **Health check**: < 2 seconds response

@@ -43,6 +43,12 @@ COPY package*.json ./
 # Install only production dependencies (include optional for platform-specific binaries)
 RUN npm ci --omit=dev && npm cache clean --force
 
+# Install Playwright and browser dependencies for SPA extraction
+RUN npx playwright install --with-deps chromium
+
+# Ensure Playwright cache directory is writable by mcp-search user
+RUN mkdir -p /home/mcp-search/.cache && chown -R mcp-search:nodejs /home/mcp-search/.cache
+
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
