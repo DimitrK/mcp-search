@@ -22,7 +22,7 @@
 - **HTML extraction**: `@mozilla/readability`, `cheerio`, `jsdom`
 - **Optional rendering**: `playwright` (dynamic import)
 - **Rate limiting**: `rate-limiter-flexible`
-- **In-memory cache**: `node-cache`
+- **In-memory cache**: Built-in (environment & logger caching)
 - **Persistent store**: `duckdb` with VSS extension
 - **Filesystem paths**: `env-paths`
 - **Hashing**: Node.js built-in `crypto` (SHA-256)
