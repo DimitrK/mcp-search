@@ -161,6 +161,7 @@ jobs:
           file: ./coverage/lcov.info
           fail_ci_if_error: false
           verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # 🐳 Docker Build & Test
   docker-test:
@@ -248,7 +249,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: dimitrk/mcp-search
+          images: dimitrisk/mcp-search
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -307,7 +308,7 @@ jobs:
             ## 🐳 Docker
             
             ```bash
-            docker pull dimitrk/mcp-search:${{ github.ref_name }}
+            docker pull dimitrisk/mcp-search:${{ github.ref_name }}
             ```
             
             ## 📋 Full Changelog
