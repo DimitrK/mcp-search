@@ -1,9 +1,9 @@
 # MCP Search
 
-[![CI/CD Pipeline](https://github.com/your-username/mcp-search/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/mcp-search/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/your-username/mcp-search/branch/main/graph/badge.svg)](https://codecov.io/gh/your-username/mcp-search)
+[![CI/CD Pipeline](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml/badge.svg)](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/DimitrK/mcp-search/branch/main/graph/badge.svg)](https://codecov.io/gh/dimitrK/mcp-search)
 [![npm version](https://badge.fury.io/js/mcp-search.svg)](https://badge.fury.io/js/mcp-search)
-[![Docker Pulls](https://img.shields.io/docker/pulls/your-username/mcp-search)](https://hub.docker.com/r/your-username/mcp-search)
+[![Docker Pulls](https://img.shields.io/docker/pulls/DimitrK/mcp-search)](https://hub.docker.com/r/dimitrK/mcp-search)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A **production-ready** Model Context Protocol (MCP) server for web search and semantic page content retrieval with local vector caching. Built for AI agents that need reliable, fast, and contextually relevant web information.
@@ -38,7 +38,7 @@ npx playwright install --with-deps chromium
 
 ```bash
 # Pull and run
-docker pull your-username/mcp-search:latest
+docker pull dimitrk/mcp-search:latest
 docker run -d --name mcp-search \
   -e GOOGLE_API_KEY=your_key \
   -e GOOGLE_SEARCH_ENGINE_ID=your_engine_id \
@@ -46,10 +46,10 @@ docker run -d --name mcp-search \
   -e EMBEDDING_SERVER_API_KEY=your_openai_key \
   -e EMBEDDING_MODEL_NAME=text-embedding-3-small \
   -v mcp_data:/app/data \
-  your-username/mcp-search:latest
+  dimitrk/mcp-search:latest
 
 # Or use docker-compose
-curl -o docker-compose.yml https://raw.githubusercontent.com/your-username/mcp-search/main/docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/dimitrk/mcp-search/main/docker-compose.yml
 docker-compose up -d
 ```
 
@@ -203,7 +203,7 @@ EMBEDDING_TOKENS_SIZE=512
 
 ```bash
 # Clone repository
-git clone https://github.com/your-username/mcp-search.git
+git clone https://github.com/dimitrk/mcp-search.git
 cd mcp-search
 
 # Install dependencies
@@ -313,7 +313,7 @@ npm run test:performance -- --verbose
 
 ```bash
 # Pull image
-docker pull your-username/mcp-search:latest
+docker pull dimitrk/mcp-search:latest
 
 # Run container
 docker run -d \
@@ -321,7 +321,7 @@ docker run -d \
   --env-file .env \
   -v mcp_data:/app/data \
   -p 3000:3000 \
-  your-username/mcp-search:latest
+  dimitrk/mcp-search:latest
 ```
 
 ### Docker Compose (Recommended)
@@ -332,7 +332,7 @@ version: '3.8'
 
 services:
   mcp-search:
-    image: your-username/mcp-search:latest
+    image: dimitrk/mcp-search:latest
     container_name: mcp-search
     restart: unless-stopped
     env_file: .env
@@ -425,9 +425,9 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ### Getting Help
 
-- 📚 [Documentation](https://github.com/your-username/mcp-search/wiki)
-- 🐛 [Issue Tracker](https://github.com/your-username/mcp-search/issues)
-- 💬 [Discussions](https://github.com/your-username/mcp-search/discussions)
+- 📚 [Documentation](https://github.com/dimitrk/mcp-search/wiki)
+- 🐛 [Issue Tracker](https://github.com/dimitrk/mcp-search/issues)
+- 💬 [Discussions](https://github.com/dimitrk/mcp-search/discussions)
 - 🔗 [MCP Specification](https://github.com/modelcontextprotocol/specification)
 
 ## 🔧 API Reference
