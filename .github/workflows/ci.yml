@@ -161,6 +161,7 @@ jobs:
           file: ./coverage/lcov.info
           fail_ci_if_error: false
           verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # 🐳 Docker Build & Test
   docker-test:
