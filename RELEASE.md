@@ -82,7 +82,7 @@ All releases automatically trigger:
 Each release creates:
 
 - 📦 **NPM Package**: `npm install mcp-search@latest`
-- 🐳 **Docker Image**: `docker pull your-username/mcp-search:latest`
+- 🐳 **Docker Image**: `docker pull dimitrk/mcp-search:latest`
 - 📝 **GitHub Release**: With auto-generated changelog
 - 📊 **Coverage Report**: Test coverage metrics
 

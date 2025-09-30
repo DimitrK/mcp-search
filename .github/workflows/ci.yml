@@ -248,7 +248,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: your-username/mcp-search
+          images: dimitrk/mcp-search
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -307,7 +307,7 @@ jobs:
             ## 🐳 Docker
             
             ```bash
-            docker pull your-username/mcp-search:${{ github.ref_name }}
+            docker pull dimitrk/mcp-search:${{ github.ref_name }}
             ```
             
             ## 📋 Full Changelog

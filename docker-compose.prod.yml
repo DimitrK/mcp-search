@@ -6,7 +6,7 @@ version: '3.8'
 services:
   mcp-search:
     # Use production image from registry instead of building locally
-    # image: your-username/mcp-search:latest
+    image: dimitrk/mcp-search:latest
     
     # Production-specific environment
     environment:

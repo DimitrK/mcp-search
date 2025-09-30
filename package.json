@@ -73,16 +73,16 @@
     "duckdb",
     "vector-search"
   ],
-  "author": "Your Name",
+  "author": "DimitrK",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/mcp-search.git"
+    "url": "https://github.com/dimitrk/mcp-search.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/mcp-search/issues"
+    "url": "https://github.com/dimitrk/mcp-search/issues"
   },
-  "homepage": "https://github.com/your-username/mcp-search#readme",
+  "homepage": "https://github.com/dimitrk/mcp-search#readme",
   "dependencies": {
     "@duckdb/node-api": "1.4.0-r.1",
     "@modelcontextprotocol/sdk": "latest",
