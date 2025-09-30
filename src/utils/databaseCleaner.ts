@@ -18,6 +18,10 @@ export class DatabaseCleaner {
 
   async cleanup(options: CleanupOptions): Promise<CleanupResult> {
     try {
+      if (options.daysOld < 0) {
+        throw new Error('Invalid days value');
+      }
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - options.daysOld);
       const cutoffIso = cutoffDate.toISOString();
