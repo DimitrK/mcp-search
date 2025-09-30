@@ -1,5 +1,5 @@
 {
-  "name": "mcp-search",
+  "name": "@dimitrk/mcp-search",
   "version": "0.1.0",
   "description": "MCP server for web search and semantic page content retrieval with local caching",
   "main": "dist/server.js",
@@ -8,7 +8,7 @@
     "node": ">=20.11.0"
   },
   "bin": {
-    "mcp-search": "dist/cli.js"
+    "@dimitrk/mcp-search": "dist/cli.js"
   },
   "exports": {
     ".": {
