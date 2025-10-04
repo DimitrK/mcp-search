@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { getEnvironment } from '../config/environment';
+import { getEnvironment, isRunningInDocker } from '../config/environment';
 
 // Sensitive keys to redact from logs
 const SENSITIVE_KEYS = [
@@ -33,20 +33,24 @@ function createLogger(): pino.Logger {
   const env = getEnvironment();
   const isDevelopment = env.NODE_ENV === 'development';
 
+  // In Docker, avoid pino-pretty transport issues by using simpler config
+  const isInDocker = isRunningInDocker();
+
   return (pino as unknown as (opts: unknown) => pino.Logger)({
     name: 'mcp-search',
     level: isDevelopment ? 'debug' : 'info',
-    transport: isDevelopment
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'HH:MM:ss Z',
-            ignore: 'pid,hostname',
-            destination: 2, // Use stderr
-          },
-        }
-      : undefined,
+    transport:
+      isDevelopment && !isInDocker
+        ? {
+            target: 'pino-pretty',
+            options: {
+              colorize: true,
+              translateTime: 'HH:MM:ss Z',
+              ignore: 'pid,hostname',
+              destination: 2, // Use stderr
+            },
+          }
+        : undefined,
     redact: {
       paths: SENSITIVE_KEYS,
       censor: '[REDACTED]',
