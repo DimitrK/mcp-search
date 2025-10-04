@@ -23,26 +23,26 @@ jobs:
   lint-and-typecheck:
     name: 📋 Code Quality
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 🔄 Checkout code
         uses: actions/checkout@v4
-        
+
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          
+
       - name: 🔧 Install dependencies
         run: npm ci
-        
+
       - name: 🎨 Check formatting
         run: npm run format:check
-        
+
       - name: 🔍 Run ESLint
         run: npm run lint
-        
+
       - name: 🔎 TypeScript check
         run: npm run typecheck
 
@@ -54,37 +54,37 @@ jobs:
       actions: read
       contents: read
       security-events: write
-      
+
     steps:
       - name: 🔄 Checkout code
         uses: actions/checkout@v4
-        
+
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          
+
       - name: 🔧 Install dependencies
         run: npm ci
-        
+
       - name: 🕵️ NPM Audit
         run: npm audit --audit-level moderate
         continue-on-error: true
-        
+
       - name: 🔍 Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
           queries: security-extended,security-and-quality
-          
+
       - name: 🏗️ Build for CodeQL
         run: npm run build
-        
+
       - name: 🔎 Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:javascript-typescript"
+          category: '/language:javascript-typescript'
 
   # 🧪 Comprehensive Testing Matrix
   test-matrix:
@@ -120,10 +120,10 @@ jobs:
 
       - name: 🏗️ Build project
         run: npm run build
-        
+
       - name: 🧪 Run unit tests
         run: npm run test:unit
-        
+
       - name: 🔗 Run integration tests
         run: npm run test:integration
         env:
@@ -133,7 +133,7 @@ jobs:
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
           EMBEDDING_MODEL_NAME: test-model
-          
+
       - name: ⚡ Run performance tests
         if: matrix.run-performance
         run: npm run test:performance
@@ -143,7 +143,7 @@ jobs:
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
           EMBEDDING_MODEL_NAME: test-model
-        
+
       - name: 📊 Generate coverage report
         if: matrix.node-version == '20.x' && matrix.os == 'ubuntu-latest'
         run: npm run test:coverage
@@ -153,7 +153,7 @@ jobs:
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
           EMBEDDING_MODEL_NAME: test-model
-          
+
       - name: 📈 Upload coverage to Codecov
         if: matrix.node-version == '20.x' && matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
@@ -202,24 +202,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-matrix, security-scan, docker-test]
     if: startsWith(github.ref, 'refs/tags/v')
-    
+
     steps:
       - name: 🔄 Checkout code
         uses: actions/checkout@v4
-        
+
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
-          
+
       - name: 🔧 Install dependencies
         run: npm ci
-        
+
       - name: 🏗️ Build project
         run: npm run build
-        
+
       - name: 🚀 Publish to NPM
         run: npm publish --access public
         env:
@@ -231,23 +231,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test-matrix, security-scan, docker-test]
     if: startsWith(github.ref, 'refs/tags/v')
-    
+
     steps:
       - name: 🔄 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🧩 Set up QEMU
         uses: docker/setup-qemu-action@v3
-        
+
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: 🔐 Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          
+
       - name: 🏷️ Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -259,7 +259,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            
+
       - name: 🚀 Build and push
         uses: docker/build-push-action@v5
         with:
@@ -277,45 +277,37 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish-npm, publish-docker]
     if: startsWith(github.ref, 'refs/tags/v')
-    
+    permissions:
+      contents: write
+
     steps:
       - name: 🔄 Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
-      - name: 📝 Generate changelog
-        id: changelog
-        uses: metcalfc/changelog-generator@v4.3.1
-        with:
-          myToken: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: 🎉 Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          append_body: true
           body: |
-            ## 🚀 What's New
-            
-            ${{ steps.changelog.outputs.changelog }}
-            
             ## 📦 Installation
-            
+
             ```bash
             npm install -g mcp-search@${{ github.ref_name }}
             ```
-            
+
             ## 🐳 Docker
-            
+
             ```bash
             docker pull dimitrisk/mcp-search:${{ github.ref_name }}
             ```
-            
+
             ## 📋 Full Changelog
-            
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.tag }}...${{ github.ref_name }}
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/releases
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
