@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import envPaths from 'env-paths';
 import { join } from 'path';
+import fs from 'fs';
 
 const EnvironmentSchema = z.object({
   // Required environment variables
@@ -40,6 +41,11 @@ export function getEnvironment(): Environment {
   try {
     const env = EnvironmentSchema.parse(process.env);
 
+    // Fix Docker networking for embedding service
+    if (isRunningInDocker()) {
+      env.EMBEDDING_SERVER_URL = fixDockerUrl(env.EMBEDDING_SERVER_URL);
+    }
+
     // Set DATA_DIR default using env-paths if not provided
     if (!env.DATA_DIR) {
       const paths = envPaths('mcp-search');
@@ -55,6 +61,39 @@ export function getEnvironment(): Environment {
     }
     throw error;
   }
+}
+
+// Check if running in Docker container
+export function isRunningInDocker(): boolean {
+  // Check for .dockerenv file (Linux containers)
+  try {
+    fs.accessSync('/.dockerenv');
+    return true;
+  } catch {
+    // Ignore error
+  }
+
+  // Check for container environment variable (Docker Compose)
+  if (process.env.DOCKER_CONTAINER) {
+    return true;
+  }
+
+  // Check cgroup (more comprehensive check)
+  try {
+    const cgroup = fs.readFileSync('/proc/1/cgroup', 'utf8');
+    return cgroup.includes('docker') || cgroup.includes('containerd');
+  } catch {
+    // Ignore error - not on Linux or /proc not available
+  }
+
+  return false;
+}
+
+// Fix localhost/127.0.0.1 URLs for Docker networking
+export function fixDockerUrl(url: string): string {
+  // Use host.docker.internal for Docker Desktop (Mac/Windows)
+  // Case-insensitive replacement for localhost and 127.0.0.1
+  return url.replace(/(127\.0\.0\.1|localhost)/gi, 'host.docker.internal');
 }
 
 export function validateEnvironment(): void {
