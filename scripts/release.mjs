@@ -43,7 +43,7 @@ try {
   console.log('🎉 Release preparation complete!');
   console.log('💡 Next steps:');
   console.log(`   1. Review changes: git log --oneline -5`);
-  console.log(`   2. Push branch: git push origin ${branchName}`);
+  console.log(`   2. Push branch: npm run release:push`);
   console.log(`   3. Create PR: ${branchName} → main`);
   console.log(`   4. After merge: git checkout main && git merge ${branchName}`);
 } catch (error) {
