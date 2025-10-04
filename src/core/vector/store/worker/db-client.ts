@@ -4,6 +4,7 @@ import { getDatabasePath, getEnvironment } from '../../../../config/environment'
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
+import { logger } from '../../../../utils/logger';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -33,15 +34,74 @@ type MinimalMessenger = {
 };
 
 function resolveWorkerPath() {
+  const env = getEnvironment();
+  logger.debug('Resolving worker path');
+
   const override = process.env.VECTOR_DB_WORKER_PATH;
-  if (override && existsSync(override)) return override;
+  if (override && existsSync(override)) {
+    logger.info(`Worker path resolved via environment override: ${override}`);
+    return override;
+  }
 
-  const localJs = join(__dirname, 'db-worker.js');
-  if (existsSync(localJs)) return localJs;
-  const distJs = join(process.cwd(), 'dist', 'core', 'vector', 'store', 'worker', 'db-worker.js');
-  if (existsSync(distJs)) return distJs;
+  // The worker file should be in the same directory as this file
+  const workerJs = join(__dirname, 'db-worker.js');
+  logger.debug(`Checking same directory: ${workerJs}`);
+  if (existsSync(workerJs)) {
+    logger.info(`Worker path resolved from same directory: ${workerJs}`);
+    return workerJs;
+  }
 
-  throw new Error('Worker path not found');
+  // Fallback: check in the dist subdirectory structure
+  const distJs = join(__dirname, 'core', 'vector', 'store', 'worker', 'db-worker.js');
+  logger.debug(`Checking dist subdirectory: ${distJs}`);
+  if (existsSync(distJs)) {
+    logger.info(`Worker path resolved from dist subdirectory: ${distJs}`);
+    return distJs;
+  }
+
+  // Fallback: check relative to the main module directory (for npm installations)
+  const mainModuleDir = env.NODE_ENV === 'development' ? process.cwd() : undefined;
+  if (mainModuleDir) {
+    const mainModuleWorker = join(
+      mainModuleDir,
+      'core',
+      'vector',
+      'store',
+      'worker',
+      'db-worker.js'
+    );
+    logger.debug(`Checking main module directory: ${mainModuleWorker}`);
+    if (existsSync(mainModuleWorker)) {
+      logger.info(`Worker path resolved from main module directory: ${mainModuleWorker}`);
+      return mainModuleWorker;
+    }
+  }
+
+  // Final fallback: check in the source directory structure (for development)
+  const sourceJs =
+    env.NODE_ENV === 'development'
+      ? join(process.cwd(), 'src', 'core', 'vector', 'store', 'worker', 'db-worker.js')
+      : '';
+  if (sourceJs) {
+    logger.debug(`Checking source directory: ${sourceJs}`);
+    if (existsSync(sourceJs)) {
+      logger.info(`Worker path resolved from source directory: ${sourceJs}`);
+      return sourceJs;
+    }
+  }
+
+  const mainModuleWorkerPath = mainModuleDir
+    ? join(mainModuleDir, 'core', 'vector', 'store', 'worker', 'db-worker.js')
+    : null;
+  const searchedPaths = [override, workerJs, distJs, mainModuleWorkerPath, sourceJs].filter(
+    Boolean
+  );
+  logger.error(`Worker path not found. Searched paths: ${searchedPaths.join(', ')}`);
+  throw new Error(
+    `Worker path not found. Searched in: ${workerJs}, ${distJs}, ${mainModuleWorkerPath || 'N/A'}, ${sourceJs || 'N/A'}. ` +
+      `Current working directory: ${process.cwd()}. __dirname: ${__dirname}. ` +
+      `Set VECTOR_DB_WORKER_PATH environment variable to specify the correct path.`
+  );
 }
 
 // getWorker: Only used for non-inline modes. Inline mode never reaches this module.
@@ -98,9 +158,7 @@ function getWorker() {
       const promise = inflight.get(id);
       if (promise) {
         if (error) promise.reject(new Error(error));
-        else {
-          promise.resolve(result);
-        }
+        else promise.resolve(result);
         inflight.delete(id);
       }
     });
