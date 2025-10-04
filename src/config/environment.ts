@@ -91,7 +91,8 @@ export function isRunningInDocker(): boolean {
 
 // Fix localhost/127.0.0.1 URLs for Docker networking
 export function fixDockerUrl(url: string): string {
-  // Use host.docker.internal for Docker Desktop (Mac/Windows)
+  // Replace localhost/127.0.0.1 with host.docker.internal for Docker Desktop (Mac/Windows).
+  // Note: On Linux Docker, host.docker.internal is not available by default; this replacement will not work unless manually configured.
   // Case-insensitive replacement for localhost and 127.0.0.1
   return url.replace(/(127\.0\.0\.1|localhost)/gi, 'host.docker.internal');
 }
