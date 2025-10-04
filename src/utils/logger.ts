@@ -14,6 +14,25 @@ const SENSITIVE_KEYS = [
   'authorization',
 ];
 
+function tryCreatePinoPrettyTransport(): pino.TransportSingleOptions | undefined {
+  try {
+    // Only try to use pino-pretty in development when it's actually available
+    require.resolve('pino-pretty');
+    return {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'HH:MM:ss Z',
+        ignore: 'pid,hostname',
+        destination: 2, // Use stderr
+      },
+    };
+  } catch {
+    // pino-pretty not available, use simple logging
+    return undefined;
+  }
+}
+
 function createRedactor(): (obj: Record<string, unknown>) => Record<string, unknown> {
   return (obj: Record<string, unknown>) => {
     const redacted = { ...obj };
@@ -33,24 +52,10 @@ function createLogger(): pino.Logger {
   const env = getEnvironment();
   const isDevelopment = env.NODE_ENV === 'development';
 
-  // In Docker, avoid pino-pretty transport issues by using simpler config
-  const isInDocker = isRunningInDocker();
-
   return (pino as unknown as (opts: unknown) => pino.Logger)({
     name: 'mcp-search',
     level: isDevelopment ? 'debug' : 'info',
-    transport:
-      isDevelopment && !isInDocker
-        ? {
-            target: 'pino-pretty',
-            options: {
-              colorize: true,
-              translateTime: 'HH:MM:ss Z',
-              ignore: 'pid,hostname',
-              destination: 2, // Use stderr
-            },
-          }
-        : undefined,
+    transport: isDevelopment && !isRunningInDocker() ? tryCreatePinoPrettyTransport() : undefined,
     redact: {
       paths: SENSITIVE_KEYS,
       censor: '[REDACTED]',
