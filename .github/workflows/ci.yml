@@ -219,6 +219,8 @@ jobs:
 
       - name: 🏗️ Build project
         run: npm run build
+        env:
+          NODE_ENV: production
 
       - name: 🚀 Publish to NPM
         run: npm publish --access public
@@ -270,6 +272,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha, scope=mcp-search
           cache-to: type=gha,mode=max,scope=mcp-search,ignore-error=true
+        env:
+          NODE_ENV: production
 
   # 🎉 Create GitHub Release
   create-release:
