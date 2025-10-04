@@ -38,17 +38,12 @@ function resolveWorkerPath() {
   logger.debug('Resolving worker path');
 
   const override = process.env.VECTOR_DB_WORKER_PATH;
-  if (override) {
-    logger.debug(`Checking environment override: ${override}`);
-    if (existsSync(override)) {
-      logger.info(`Worker path resolved via environment override: ${override}`);
-      return override;
-    }
-    logger.debug(`Environment override path not found: ${override}`);
+  if (override && existsSync(override)) {
+    logger.info(`Worker path resolved via environment override: ${override}`);
+    return override;
   }
 
   // The worker file should be in the same directory as this file
-  // This works correctly with npx installations since __dirname points to the actual file location
   const workerJs = join(__dirname, 'db-worker.js');
   logger.debug(`Checking same directory: ${workerJs}`);
   if (existsSync(workerJs)) {
@@ -65,13 +60,16 @@ function resolveWorkerPath() {
   }
 
   // Fallback: check relative to the main module directory (for npm installations)
-  const mainModuleDir = process.mainModule
-    ? dirname(process.mainModule.filename)
-    : env.NODE_ENV === 'development'
-      ? process.cwd()
-      : '';
-  const mainModuleWorker = join(mainModuleDir, 'core', 'vector', 'store', 'worker', 'db-worker.js');
+  const mainModuleDir = env.NODE_ENV === 'development' ? process.cwd() : undefined;
   if (mainModuleDir) {
+    const mainModuleWorker = join(
+      mainModuleDir,
+      'core',
+      'vector',
+      'store',
+      'worker',
+      'db-worker.js'
+    );
     logger.debug(`Checking main module directory: ${mainModuleWorker}`);
     if (existsSync(mainModuleWorker)) {
       logger.info(`Worker path resolved from main module directory: ${mainModuleWorker}`);
@@ -92,11 +90,15 @@ function resolveWorkerPath() {
     }
   }
 
-  logger.error(
-    `Worker path not found. Searched paths: ${[override, workerJs, distJs, mainModuleWorker, sourceJs].filter(Boolean).join(', ')}`
+  const mainModuleWorkerPath = mainModuleDir
+    ? join(mainModuleDir, 'core', 'vector', 'store', 'worker', 'db-worker.js')
+    : null;
+  const searchedPaths = [override, workerJs, distJs, mainModuleWorkerPath, sourceJs].filter(
+    Boolean
   );
+  logger.error(`Worker path not found. Searched paths: ${searchedPaths.join(', ')}`);
   throw new Error(
-    `Worker path not found. Searched in: ${workerJs}, ${distJs}, ${mainModuleWorker}, ${sourceJs}. ` +
+    `Worker path not found. Searched in: ${workerJs}, ${distJs}, ${mainModuleWorkerPath || 'N/A'}, ${sourceJs || 'N/A'}. ` +
       `Current working directory: ${process.cwd()}. __dirname: ${__dirname}. ` +
       `Set VECTOR_DB_WORKER_PATH environment variable to specify the correct path.`
   );
@@ -156,9 +158,7 @@ function getWorker() {
       const promise = inflight.get(id);
       if (promise) {
         if (error) promise.reject(new Error(error));
-        else {
-          promise.resolve(result);
-        }
+        else promise.resolve(result);
         inflight.delete(id);
       }
     });
