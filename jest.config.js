@@ -12,7 +12,15 @@ export default {
         tsconfig: 'tsconfig.json',
       },
     ],
+    '^.+\\.js$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: 'tsconfig.json',
+      },
+    ],
   },
+  transformIgnorePatterns: ['node_modules/(?!((@duckdb)/.*)\\.js$)'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
