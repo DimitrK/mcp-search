@@ -1,7 +1,7 @@
 # MCP Search
 
 [![CI/CD Pipeline](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml/badge.svg)](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/DimitrK/mcp-search/branch/main/graph/badge.svg)](https://codecov.io/gh/dimitrK/mcp-search)
+[![Coverage](https://codecov.io/gh/DimitrK/mcp-search/branch/master/graph/badge.svg)](https://codecov.io/gh/dimitrK/mcp-search)
 [![npm version](https://badge.fury.io/js/mcp-search.svg)](https://badge.fury.io/js/mcp-search)
 [![Docker Pulls](https://img.shields.io/docker/pulls/DimitrK/mcp-search)](https://hub.docker.com/r/dimitrisk/mcp-search)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
