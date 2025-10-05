@@ -1,5 +1,6 @@
 import pino from 'pino';
-import { getEnvironment, isRunningInDocker } from '../config/environment';
+import { getEnvironment } from '../config/environment';
+import { getTransport } from './getTransport';
 
 // Sensitive keys to redact from logs
 const SENSITIVE_KEYS = [
@@ -13,25 +14,6 @@ const SENSITIVE_KEYS = [
   'apikey',
   'authorization',
 ];
-
-function tryCreatePinoPrettyTransport(): pino.TransportSingleOptions | undefined {
-  try {
-    // Only try to use pino-pretty in development when it's actually available
-    require.resolve('pino-pretty');
-    return {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'HH:MM:ss Z',
-        ignore: 'pid,hostname',
-        destination: 2, // Use stderr
-      },
-    };
-  } catch {
-    // pino-pretty not available, use simple logging
-    return undefined;
-  }
-}
 
 function createRedactor(): (obj: Record<string, unknown>) => Record<string, unknown> {
   return (obj: Record<string, unknown>) => {
@@ -55,7 +37,7 @@ function createLogger(): pino.Logger {
   return (pino as unknown as (opts: unknown) => pino.Logger)({
     name: 'mcp-search',
     level: isDevelopment ? 'debug' : 'info',
-    transport: isDevelopment && !isRunningInDocker() ? tryCreatePinoPrettyTransport() : undefined,
+    transport: getTransport(),
     redact: {
       paths: SENSITIVE_KEYS,
       censor: '[REDACTED]',
@@ -75,6 +57,7 @@ export function getLogger(): pino.Logger {
 export const logger: pino.Logger = new Proxy({} as pino.Logger, {
   get: (_target, prop: string | symbol) => {
     const real = getLogger();
+
     const value = (real as unknown as Record<string | symbol, unknown>)[prop];
     if (typeof value === 'function') {
       return (value as (...args: unknown[]) => unknown).bind(real);
