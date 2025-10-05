@@ -9,6 +9,11 @@ process.env.EMBEDDING_SERVER_API_KEY = 'test-embedding-api-key';
 process.env.EMBEDDING_MODEL_NAME = 'text-embedding-ada-002';
 process.env.DATA_DIR = '/tmp/mcp-search-test';
 
+// Global mocks for all tests
+jest.mock('../src/utils/getTransport', () => ({
+  getTransport: () => null,
+}));
+
 // Global test utilities can be added here
 
 export {};
