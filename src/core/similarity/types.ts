@@ -85,3 +85,19 @@ export class ValidationError extends SimilaritySearchError {
     this.name = 'ValidationError';
   }
 }
+// Rate limiting types
+export interface RateLimiterOptions {
+  maxRequests: number;
+  windowMs: number;
+  maxRetries?: number;
+  retryDelayMs?: number;
+}
+
+export interface RateLimitResult<T> {
+  item: T;
+  delayMs: number;
+  retryCount: number;
+}
+
+// Re-export RateLimiter for convenience
+export { RateLimiter } from './rateLimiter';
