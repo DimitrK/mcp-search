@@ -3,8 +3,6 @@ import { ReadFromPageInput, ReadFromPageOutputType, RelevantChunkType } from '..
 import { FetchOptions, FetchResult, fetchUrl } from '../core/content/httpContentFetcher';
 import { extractContent } from '../core/content/htmlContentExtractor';
 import { semanticChunker } from '../core/content/chunker';
-import { EmbeddingIntegrationService } from '../core/vector/embeddingIntegrationService';
-import { createEmbeddingProvider } from '../core/vector/embeddingProvider';
 import { upsertDocument, getDocument, DocumentRow } from '../core/vector/store/documents';
 import { similaritySearch } from '../core/vector/store/chunks';
 import { normalizeUrl } from '../utils/urlValidator';
@@ -12,13 +10,16 @@ import { generateCorrelationId, withTiming } from '../utils/logger';
 import { getEnvironment } from '../config/environment';
 import { TimeoutError, NetworkError, ExtractionError, EmbeddingError } from '../mcp/errors';
 import { sha256Hex } from '../utils/contentHash';
-import { consolidateOverlappingChunks } from '../core/content/chunkConsolidator';
+import { SimilaritySearchManager } from '../core/similarity/similaritySearchManager';
+import { RelevantChunkMapper } from '../core/similarity/mappers/relevantChunkMapper';
+import type { HandlerContext } from '../mcp/mcpServer';
 
 // Use singleton instance from import
 
 export async function handleReadFromPage(
   args: unknown,
-  logger: pino.Logger
+  logger: pino.Logger,
+  context?: HandlerContext
 ): Promise<{ content: { type: 'text'; text: string }[] }> {
   const input = ReadFromPageInput.parse(args);
   const correlationId = generateCorrelationId();
@@ -36,11 +37,12 @@ export async function handleReadFromPage(
 
   const normalizedUrl = normalizeUrl(input.url);
   const env = getEnvironment();
-  let embeddingService: EmbeddingIntegrationService | null = null;
+  let searchManager: SimilaritySearchManager | null = null;
   let note: string | undefined;
 
   try {
     // Phase 1: Content Fetching & Caching Logic
+    await context?.sendProgress(0, 100, 'Checking cache...');
     const { shouldProcess, existingDoc } = await withTiming(
       childLogger,
       'cache.check',
@@ -75,6 +77,7 @@ export async function handleReadFromPage(
 
     if (shouldProcess) {
       // Fetch content (potentially with conditional GET)
+      await context?.sendProgress(10, 100, 'Fetching content...');
       fetchResult = await withTiming(childLogger, 'content.fetch', async () => {
         const fetchOptions: FetchOptions = {};
         if (existingDoc?.etag && !input.forceRefresh) {
@@ -94,11 +97,13 @@ export async function handleReadFromPage(
         documentMetadata = existingDoc;
       } else {
         // Phase 2: Content Processing Pipeline
+        await context?.sendProgress(30, 100, 'Extracting content...');
         const extractionResult = await withTiming(childLogger, 'content.extract', async () => {
           childLogger.debug({ contentLength: fetchResult.bodyText.length }, 'Extracting content');
           return await extractContent(fetchResult.bodyText, normalizedUrl);
         });
 
+        await context?.sendProgress(40, 100, 'Chunking content...');
         const chunks = await withTiming(childLogger, 'content.chunk', async () => {
           const chunkingOptions = {
             maxTokens: env.EMBEDDING_TOKENS_SIZE,
@@ -117,36 +122,50 @@ export async function handleReadFromPage(
         });
 
         // Phase 3: Embedding Integration
+        await context?.sendProgress(50, 100, 'Generating embeddings...');
         try {
-          const embeddingProvider = await createEmbeddingProvider({
-            type: 'http',
-            serverUrl: env.EMBEDDING_SERVER_URL,
-            apiKey: env.EMBEDDING_SERVER_API_KEY,
-            modelName: env.EMBEDDING_MODEL_NAME,
-            batchSize: env.EMBEDDING_BATCH_SIZE,
+          searchManager = await SimilaritySearchManager.create(childLogger, {
+            correlationId,
           });
 
-          embeddingService = new EmbeddingIntegrationService(embeddingProvider);
+          if (searchManager) {
+            await withTiming(childLogger, 'embedding.store', async () => {
+              childLogger.debug({ chunkCount: chunks.length }, 'Storing content with embeddings');
+              await searchManager!.storeWithEmbeddings(normalizedUrl, chunks, { correlationId });
+            });
 
-          await withTiming(childLogger, 'embedding.store', async () => {
-            childLogger.debug({ chunkCount: chunks.length }, 'Storing content with embeddings');
-            await embeddingService!.storeWithEmbeddings(normalizedUrl, chunks, { correlationId });
-          });
+            // Store document metadata in success path
+            await upsertDocument(
+              {
+                url: normalizedUrl,
+                title: extractionResult.title || undefined,
+                etag: fetchResult.etag,
+                last_modified: fetchResult.lastModified,
+                last_crawled: new Date().toISOString(),
+                content_hash: sha256Hex(extractionResult.textContent), // Real content hash per spec
+              },
+              { correlationId }
+            );
 
-          // Store document metadata in success path
-          await upsertDocument(
-            {
-              url: normalizedUrl,
-              title: extractionResult.title || undefined,
-              etag: fetchResult.etag,
-              last_modified: fetchResult.lastModified,
-              last_crawled: new Date().toISOString(),
-              content_hash: sha256Hex(extractionResult.textContent), // Real content hash per spec
-            },
-            { correlationId }
-          );
-
-          childLogger.debug({}, 'Content processing completed successfully');
+            childLogger.debug({}, 'Content processing completed successfully');
+          } else {
+            // Store content without embeddings as fallback
+            note = 'Embedding service unavailable; returning content without semantic search';
+            await upsertDocument(
+              {
+                url: normalizedUrl,
+                title: extractionResult.title || undefined,
+                etag: fetchResult.etag,
+                last_crawled: new Date().toISOString(),
+                content_hash: sha256Hex(extractionResult.textContent), // Real content hash per spec
+              },
+              { correlationId }
+            );
+            childLogger.debug(
+              {},
+              'Content stored without embeddings due to manager initialization failure'
+            );
+          }
         } catch (embeddingError) {
           childLogger.warn(
             { error: embeddingError },
@@ -155,16 +174,23 @@ export async function handleReadFromPage(
           note = 'Embedding service unavailable; returning content without semantic search';
 
           // Store content without embeddings as fallback
-          await upsertDocument(
-            {
-              url: normalizedUrl,
-              title: extractionResult.title || undefined,
-              etag: fetchResult.etag,
-              last_crawled: new Date().toISOString(),
-              content_hash: sha256Hex(extractionResult.textContent), // Real content hash per spec
-            },
-            { correlationId }
-          );
+          try {
+            await upsertDocument(
+              {
+                url: normalizedUrl,
+                title: extractionResult.title || undefined,
+                etag: fetchResult.etag,
+                last_crawled: new Date().toISOString(),
+                content_hash: sha256Hex(extractionResult.textContent), // Real content hash per spec
+              },
+              { correlationId }
+            );
+          } catch (upsertError) {
+            childLogger.warn(
+              { error: upsertError },
+              'Failed to store document metadata after embedding failure - continuing'
+            );
+          }
         }
 
         // Update document metadata
@@ -181,117 +207,136 @@ export async function handleReadFromPage(
     }
 
     // Phase 4: Query Processing & Similarity Search
+    await context?.sendProgress(70, 100, 'Processing similarity search...');
     const queries = Array.isArray(input.query) ? input.query : [input.query];
-    const queryResults = await withTiming(childLogger, 'query.process', async () => {
-      const results: { query: string; results: RelevantChunkType[] }[] = [];
 
-      if (embeddingService && !note) {
-        // Use semantic search with embeddings
-        for (const query of queries) {
-          childLogger.debug({ query }, 'Processing query with semantic search');
+    let queryResults: { query: string; results: RelevantChunkType[] }[];
+    try {
+      queryResults = await withTiming(childLogger, 'query.process', async () => {
+        const results: { query: string; results: RelevantChunkType[] }[] = [];
 
-          try {
-            const searchResults = await embeddingService.searchSimilar(
-              normalizedUrl,
+        if (searchManager && !note) {
+          // Use manager for parallel query processing
+          const similarityResults = await searchManager.searchMultiple(
+            queries,
+            normalizedUrl,
+            input.maxResults,
+            { correlationId }
+          );
+
+          // Map results to expected format
+          for (const query of queries) {
+            const chunks = similarityResults.get(query) || [];
+            results.push({
               query,
-              input.maxResults || 8,
-              { correlationId }
-            );
+              results: RelevantChunkMapper.mapChunksToRelevant(chunks),
+            });
+          }
+        } else {
+          // Fallback: Return raw chunks without semantic scoring
+          childLogger.debug({}, 'Using fallback content retrieval without embeddings');
 
-            // Apply similarity threshold filtering
-            const filteredResults = searchResults.filter(
-              result => result.score >= env.SIMILARITY_THRESHOLD
-            );
+          for (const query of queries) {
+            // Simple text matching fallback - get chunks that contain query terms
+            const queryTerms = query.toLowerCase().split(/\s+/);
 
-            // Consolidate overlapping chunks for cleaner AI agent consumption
-            const consolidatedResults = consolidateOverlappingChunks(filteredResults);
+            try {
+              // Try to get any existing chunks for basic content return
+              const rawResults = await similaritySearch(
+                normalizedUrl,
+                Array(1024).fill(0), // Dummy embedding
+                input.maxResults,
+                1024 // dummy dimension
+              );
 
-            childLogger.debug(
-              {
+              const matchingChunks = rawResults
+                .filter(chunk => {
+                  const chunkText = chunk.text.toLowerCase();
+                  return queryTerms.some(term => chunkText.includes(term));
+                })
+                .slice(0, input.maxResults)
+                .map(chunk => ({
+                  id: chunk.id,
+                  text: chunk.text,
+                  score: 0.5, // Default score for fallback
+                  sectionPath: chunk.section_path ? chunk.section_path.split('|') : undefined,
+                }));
+
+              results.push({
                 query,
-                totalResults: searchResults.length,
-                filteredResults: filteredResults.length,
-                consolidatedResults: consolidatedResults.length,
-                threshold: env.SIMILARITY_THRESHOLD,
-              },
-              'Query processing completed with chunk consolidation'
-            );
-
-            results.push({
-              query,
-              results: consolidatedResults.map(result => ({
-                id: result.id,
-                text: result.text,
-                score: result.score,
-                sectionPath: result.section_path ? result.section_path.split('|') : undefined,
-              })),
-            });
-          } catch (queryError) {
-            childLogger.warn(
-              { error: queryError, query },
-              'Query embedding failed - using fallback'
-            );
-
-            // Graceful degradation: set note and fall back to text search
-            note =
-              note || 'Embedding service unavailable; returning content without semantic search';
-
-            // Add empty results for this query due to embedding failure
-            results.push({
-              query,
-              results: [],
-            });
+                results: matchingChunks,
+              });
+            } catch (searchError) {
+              childLogger.warn({ error: searchError }, 'Fallback search also failed');
+              // Return empty results for this query
+              results.push({
+                query,
+                results: [],
+              });
+            }
           }
         }
-      } else {
-        // Fallback: Return raw chunks without semantic scoring
-        childLogger.debug({}, 'Using fallback content retrieval without embeddings');
 
-        for (const query of queries) {
-          // Simple text matching fallback - get chunks that contain query terms
-          const queryTerms = query.toLowerCase().split(/\s+/);
-
-          try {
-            // Try to get any existing chunks for basic content return
-            const rawResults = await similaritySearch(
-              normalizedUrl,
-              Array(1024).fill(0), // Dummy embedding
-              input.maxResults || 8,
-              1024 // dummy dimension
-            );
-
-            const matchingChunks = rawResults
-              .filter(chunk => {
-                const chunkText = chunk.text.toLowerCase();
-                return queryTerms.some(term => chunkText.includes(term));
-              })
-              .slice(0, input.maxResults || 8)
-              .map(chunk => ({
-                id: chunk.id,
-                text: chunk.text,
-                score: 0.5, // Default score for fallback
-                sectionPath: chunk.section_path ? chunk.section_path.split('|') : undefined,
-              }));
-
-            results.push({
-              query,
-              results: matchingChunks,
-            });
-          } catch (searchError) {
-            childLogger.warn({ error: searchError }, 'Fallback search also failed');
-            // Return empty results for this query
-            results.push({
-              query,
-              results: [],
-            });
-          }
+        return results;
+      });
+    } catch (queryError) {
+      // If query processing fails due to embedding issues, set note and use fallback
+      if (!note && (queryError as Error).message.includes('Embedding')) {
+        childLogger.warn(
+          { error: queryError },
+          'Embedding service failed during query processing - using fallback'
+        );
+        note = 'Embedding service unavailable; returning content without semantic search';
+      } else if (!note) {
+        // Check if it's an embedding-related error by checking the error type or nested error
+        const error = queryError as Error & {
+          type?: string;
+          originalError?: { name?: string };
+        };
+        if (
+          error?.type === 'embedding' ||
+          error?.originalError?.name === 'EmbeddingError' ||
+          error?.message?.includes('embedding')
+        ) {
+          childLogger.warn(
+            { error: queryError },
+            'Embedding service failed during query processing - using fallback'
+          );
+          note = 'Embedding service unavailable; returning content without semantic search';
         }
       }
 
-      return results;
-    });
+      // Use fallback query processing
+      queryResults = [];
+      for (const query of queries) {
+        try {
+          const rawResults = await similaritySearch(
+            normalizedUrl,
+            Array(1024).fill(0), // Dummy embedding
+            input.maxResults,
+            1024 // dummy dimension
+          );
+
+          const matchingChunks = rawResults.slice(0, input.maxResults);
+          queryResults.push({
+            query,
+            results: RelevantChunkMapper.mapChunksToRelevant(matchingChunks),
+          });
+        } catch (fallbackError) {
+          childLogger.warn(
+            { error: fallbackError, query },
+            'Fallback search also failed - returning empty results'
+          );
+          queryResults.push({
+            query,
+            results: [],
+          });
+        }
+      }
+    }
 
     // Phase 5: Response Construction
+    await context?.sendProgress(90, 100, 'Building response...');
     if (!documentMetadata) {
       throw new Error('Internal error: documentMetadata was not set during processing');
     }
@@ -303,6 +348,8 @@ export async function handleReadFromPage(
       queries: queryResults,
       note,
     };
+
+    await context?.sendProgress(100, 100, 'Completed');
 
     childLogger.info(
       {
@@ -347,12 +394,8 @@ export async function handleReadFromPage(
     }
   } finally {
     // Cleanup resources
-    if (embeddingService) {
-      try {
-        await embeddingService.close();
-      } catch (closeError) {
-        childLogger.warn({ error: closeError }, 'Failed to close embedding service');
-      }
+    if (searchManager) {
+      await searchManager.close();
     }
   }
 }

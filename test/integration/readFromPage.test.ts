@@ -7,6 +7,9 @@ import { deleteChunksByUrl } from '../../src/core/vector/store/chunks';
 import { normalizeUrl } from '../../src/utils/urlValidator';
 import { ReadFromPageOutputType } from '../../src/mcp/schemas';
 
+// Mock undici module globally
+jest.mock('undici');
+
 // Helper to parse MCP content format
 function parseReadFromPageResult(result: {
   content: { type: 'text'; text: string }[];
@@ -14,25 +17,9 @@ function parseReadFromPageResult(result: {
   return JSON.parse(result.content[0].text) as ReadFromPageOutputType;
 }
 
-// Mock external dependencies
-jest.mock('undici', () => {
-  const mockClient = {
-    compose: jest.fn().mockReturnThis(),
-    request: jest.fn(),
-    close: jest.fn().mockResolvedValue(undefined),
-  };
-
-  return {
-    request: jest.fn(),
-    Client: jest.fn().mockImplementation(() => mockClient),
-    interceptors: {
-      redirect: jest.fn().mockReturnValue(() => mockClient),
-    },
-  };
-});
-
-const mockUndici = jest.mocked(require('undici'));
-const mockClientRequest = mockUndici.Client().request;
+// Create isolated mock instances for each test
+let mockClientRequest: any;
+let mockUndiciRequest: any;
 
 describe('readFromPage Integration', () => {
   const logger = createChildLogger('test');
@@ -54,11 +41,28 @@ describe('readFromPage Integration', () => {
     testUrl = `https://example.com/test-article-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     normalizedTestUrl = normalizeUrl(testUrl);
 
+    // Create mock client for this test
+    const mockClient = {
+      compose: jest.fn().mockReturnThis(),
+      request: jest.fn(),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+
+    // Set up mock implementations
+    const mockUndici = jest.requireMock('undici');
+    mockUndici.request.mockImplementation(jest.fn());
+    mockUndici.Client.mockImplementation(() => mockClient);
+    mockUndici.interceptors.redirect.mockReturnValue(() => mockClient);
+
+    // Initialize fresh mock instances for this test
+    mockClientRequest = mockUndici.Client().request;
+    mockUndiciRequest = mockUndici.request;
+
     // Clean up any existing test data for this unique URL (should be empty, but just in case)
     await deleteChunksByUrl(normalizedTestUrl);
     await deleteDocument(normalizedTestUrl);
 
-    // Reset mocks
+    // Clear mock call history but preserve implementations
     jest.clearAllMocks();
   });
 
@@ -102,7 +106,7 @@ describe('readFromPage Integration', () => {
       });
 
       // Mock embedding API response - single chunk gets single embedding
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
@@ -111,11 +115,13 @@ describe('readFromPage Integration', () => {
               { embedding: Array(1024).fill(0.8) }, // High similarity for good scoring
             ],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       // Mock embedding query response - similar vector for high similarity
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
@@ -124,7 +130,9 @@ describe('readFromPage Integration', () => {
               { embedding: Array(1024).fill(0.8) }, // Same values for high similarity
             ],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       const input = {
@@ -194,25 +202,29 @@ describe('readFromPage Integration', () => {
         },
       });
 
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.1) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       // Query embedding
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.1) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       const input = {
@@ -245,14 +257,16 @@ describe('readFromPage Integration', () => {
       });
 
       // Only need query embedding for cached content
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.1) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       const cachedResult = await handleReadFromPage(input, logger);
@@ -262,7 +276,7 @@ describe('readFromPage Integration', () => {
       expect(parsedCachedContent.queries[0].results.length).toBeGreaterThanOrEqual(0);
 
       // Should have fewer HTTP calls (no content re-embedding)
-      const embeddingCalls = mockUndici.request.mock.calls.filter(
+      const embeddingCalls = mockUndiciRequest.mock.calls.filter(
         (call: any) =>
           call[0].url?.includes('/v1/embeddings') ||
           (typeof call[0] === 'string' && call[0].includes('/v1/embeddings'))
@@ -285,24 +299,28 @@ describe('readFromPage Integration', () => {
         },
       });
 
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.2) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.2) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       // Initial request
@@ -331,24 +349,28 @@ describe('readFromPage Integration', () => {
         },
       });
 
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.3) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
           json: jest.fn().mockResolvedValue({
             data: [{ embedding: Array(1024).fill(0.3) }],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       const refreshedResult = await handleReadFromPage(
@@ -389,6 +411,9 @@ describe('readFromPage Integration', () => {
     });
 
     it('should handle embedding service errors gracefully', async () => {
+      // Clear all previous mock setup and state
+      mockUndiciRequest.mockReset();
+
       // Mock successful content fetch
       mockClientRequest.mockResolvedValueOnce({
         statusCode: 200,
@@ -400,8 +425,10 @@ describe('readFromPage Integration', () => {
         },
       });
 
-      // Mock embedding service failure
-      mockUndici.request.mockRejectedValueOnce(new Error('Embedding service unavailable'));
+      // Mock embedding service failure for ALL calls using mockImplementation
+      mockUndiciRequest.mockImplementation(() => {
+        return Promise.reject(new Error('Embedding service unavailable'));
+      });
 
       const input = {
         url: testUrl,
@@ -414,6 +441,7 @@ describe('readFromPage Integration', () => {
 
       // Parse MCP content and check graceful degradation
       const parsedErrorContent = parseReadFromPageResult(result);
+      expect(parsedErrorContent.note).toBeDefined();
       expect(parsedErrorContent.note).toMatch(/embedding.*unavailable|without.*semantic.*search/i);
 
       // In degraded mode, results might be empty since no embeddings are available
@@ -439,7 +467,7 @@ describe('readFromPage Integration', () => {
       });
 
       // Content embedding - handle multiple chunks (readability can extract more content)
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
@@ -452,11 +480,13 @@ describe('readFromPage Integration', () => {
               { embedding: Array(1024).fill(0.8) },
             ], // Support up to 5 chunks that readability might extract
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       // First query embedding - 'artificial intelligence'
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
@@ -465,11 +495,13 @@ describe('readFromPage Integration', () => {
               { embedding: Array(1024).fill(0.8) }, // AI query - high similarity
             ],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       // Second query embedding - 'blockchain'
-      mockUndici.request.mockResolvedValueOnce({
+      mockUndiciRequest.mockResolvedValueOnce({
         statusCode: 200,
         headers: { 'content-type': 'application/json' },
         body: {
@@ -478,7 +510,9 @@ describe('readFromPage Integration', () => {
               { embedding: Array(1024).fill(0.8) }, // blockchain query - high similarity
             ],
           }),
-        },
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
       });
 
       const input = {
