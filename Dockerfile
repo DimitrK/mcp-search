@@ -44,7 +44,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Install Playwright and browser dependencies for SPA extraction
-RUN npx playwright install --with-deps chromium
+RUN npx playwright@1.55.1 install --with-deps chromium
 
 # Ensure Playwright cache directory is writable by mcp-search user
 RUN mkdir -p /home/mcp-search/.cache && chown -R mcp-search:nodejs /home/mcp-search/.cache
