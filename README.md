@@ -11,7 +11,7 @@ A **production-ready** Model Context Protocol (MCP) server for web search and se
 ## ✨ Features
 
 - 🔍 **Google Custom Search**: Batch queries with rate limiting and error recovery
-- 🧠 **Semantic Page Reading**: Extract and chunk content with embedding-based similarity search  
+- 🧠 **Semantic Page Reading**: Extract and chunk content with embedding-based similarity search
 - 💾 **Local Vector Caching**: DuckDB + VSS extension for persistent, fast retrieval
 - 🛡️ **Production Security**: Input validation, content filtering, graceful degradation
 - 📊 **Observability**: Structured logging, correlation IDs, performance metrics
@@ -21,59 +21,103 @@ A **production-ready** Model Context Protocol (MCP) server for web search and se
 
 ## 🚀 Quick Start
 
-### NPM Installation
+### Prerequisites
+
+Follow this guide to create your Google Search API credentials: [Programmable Search Engine](https://developers.google.com/custom-search/v1/introduction).
+
+### Installing MCP through NPM
+
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkaW1pdHJrL21jcC1zZWFyY2giXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tL3YxIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW09QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
+
+#### Install Playwright (optional - enables crawling SPAs)
 
 ```bash
-# Global installation (recommended for CLI usage)
-npm install -g mcp-search
-
-# Or local installation
-npm install mcp-search
-
 # Additionally install Playwright with chromium browser. This is a peer dependency that allows the mcp to crawl SPAs
-npx playwright install --with-deps chromium
+npx playwright@1.55.1 install --with-deps chromium
 ```
 
-### Docker Installation
+#### Install the MCP
 
-```bash
-# Pull and run
-docker pull dimitrisk/mcp-search:latest
-docker run -d --name mcp-search \
-  -e GOOGLE_API_KEY=your_key \
-  -e GOOGLE_SEARCH_ENGINE_ID=your_engine_id \
-  -e EMBEDDING_SERVER_URL=https://api.openai.com/v1 \
-  -e EMBEDDING_SERVER_API_KEY=your_openai_key \
-  -e EMBEDDING_MODEL_NAME=text-embedding-3-small \
-  -v mcp_data:/app/data \
-  dimitrisk/mcp-search:latest
-
-# Or use docker-compose
-curl -o docker-compose.yml https://raw.githubusercontent.com/dimitrk/mcp-search/main/docker-compose.yml
-docker-compose up -d
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "command": "npx",
+      "args": ["-y", "@dimitrk/mcp-search"],
+      "env": {
+        "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
+        "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ID]",
+        "EMBEDDING_SERVER_URL": "https://api.openai.com/v1",
+        "EMBEDDING_SERVER_API_KEY": "[OPEN AI KEY]",
+        "EMBEDDING_MODEL_NAME": "text-embedding-3-small",
+        "SIMILARITY_THRESHOLD": "0.72"
+      }
+    }
+  }
+}
 ```
 
-### Environment Setup
+### Installing MCP through Docker
 
-Create `.env` file:
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIkdPT0dMRV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggRU5HSU5FIElEXSIsIkVNQkVERElOR19TRVJWRVJfVVJMIjoiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSI6IltZT1VSIE9QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
 
-```bash
-# Required
-GOOGLE_API_KEY=your_google_api_key_here
-GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
-EMBEDDING_SERVER_URL=https://api.openai.com/v1
-EMBEDDING_SERVER_API_KEY=your_openai_api_key_here
-EMBEDDING_MODEL_NAME=text-embedding-3-small
-
-# Optional (with defaults)
-DATA_DIR=~/.mcp-search                   # Data storage location
-SIMILARITY_THRESHOLD=0.6                 # Similarity cutoff (0-1)
-EMBEDDING_TOKENS_SIZE=512               # Chunk size in tokens
-REQUEST_TIMEOUT_MS=20000                # HTTP timeout
-CONCURRENCY=2                           # Concurrent requests
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GOOGLE_API_KEY",
+        "-e",
+        "GOOGLE_SEARCH_ENGINE_ID",
+        "-e",
+        "EMBEDDING_SERVER_URL",
+        "-e",
+        "EMBEDDING_SERVER_API_KEY",
+        "-e",
+        "EMBEDDING_MODEL_NAME",
+        "-e",
+        "SIMILARITY_THRESHOLD",
+        "-v",
+        "mcp_data:/app/data",
+        "mcp-search:test"
+      ],
+      "env": {
+        "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
+        "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ENGINE ID]",
+        "EMBEDDING_SERVER_URL": "https://api.openai.com/v1",
+        "EMBEDDING_SERVER_API_KEY": "[YOUR OPEN AI KEY]",
+        "EMBEDDING_MODEL_NAME": "text-embedding-3-small",
+        "SIMILARITY_THRESHOLD": "0.72"
+      }
+    }
+  }
+}
 ```
 
-## 📖 Usage
+## 🔧 Configuration
+
+### Environment Variables Reference
+
+| Variable                   | Required | Default         | Description                         |
+| -------------------------- | -------- | --------------- | ----------------------------------- |
+| `GOOGLE_API_KEY`           | ✅       | -               | Google Custom Search API key        |
+| `GOOGLE_SEARCH_ENGINE_ID`  | ✅       | -               | Google Custom Search Engine ID      |
+| `EMBEDDING_SERVER_URL`     | ✅       | -               | OpenAI-compatible embedding API URL |
+| `EMBEDDING_SERVER_API_KEY` | ✅       | -               | API key for embedding service       |
+| `EMBEDDING_MODEL_NAME`     | ✅       | -               | Model name for embeddings           |
+| `DATA_DIR`                 | ❌       | OS app data dir | Data storage directory              |
+| `SIMILARITY_THRESHOLD`     | ❌       | 0.6             | Minimum similarity score (0-1)      |
+| `EMBEDDING_TOKENS_SIZE`    | ❌       | 512             | Chunk size in tokens                |
+| `REQUEST_TIMEOUT_MS`       | ❌       | 20000           | HTTP request timeout                |
+| `CONCURRENCY`              | ❌       | 2               | Max concurrent requests             |
+| `VECTOR_DB_MODE`           | ❌       | `inline`        | `inline`, `thead` or `process`      |
+
+## 📖 Using it as a library
 
 ### Command Line Interface
 
@@ -111,27 +155,29 @@ const client = new Client({
 ### Tool Usage Examples
 
 #### Web Search
+
 ```typescript
 // Single query
 const result = await client.callTool({
   name: 'web.search',
   arguments: {
     query: 'latest AI developments',
-    resultsPerQuery: 5
-  }
+    resultsPerQuery: 5,
+  },
 });
 
 // Multiple queries in parallel
 const results = await client.callTool({
-  name: 'web.search', 
+  name: 'web.search',
   arguments: {
     query: ['machine learning', 'neural networks', 'transformers'],
-    resultsPerQuery: 3
-  }
+    resultsPerQuery: 3,
+  },
 });
 ```
 
 #### Semantic Page Reading
+
 ```typescript
 // Extract and search page content
 const pageResults = await client.callTool({
@@ -140,8 +186,8 @@ const pageResults = await client.callTool({
     url: 'https://example.com/article',
     query: ['main findings', 'methodology', 'conclusions'],
     maxResults: 8,
-    forceRefresh: false
-  }
+    forceRefresh: false,
+  },
 });
 
 // Returns semantically relevant text chunks with similarity scores
@@ -154,23 +200,6 @@ console.log(pageResults.queries[0].results[0]);
 // }
 ```
 
-## 🔧 Configuration
-
-### Environment Variables Reference
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GOOGLE_API_KEY` | ✅ | - | Google Custom Search API key |
-| `GOOGLE_SEARCH_ENGINE_ID` | ✅ | - | Google Custom Search Engine ID |
-| `EMBEDDING_SERVER_URL` | ✅ | - | OpenAI-compatible embedding API URL |
-| `EMBEDDING_SERVER_API_KEY` | ✅ | - | API key for embedding service |
-| `EMBEDDING_MODEL_NAME` | ✅ | - | Model name for embeddings |
-| `DATA_DIR` | ❌ | OS app data dir | Data storage directory |
-| `SIMILARITY_THRESHOLD` | ❌ | 0.6 | Minimum similarity score (0-1) |
-| `EMBEDDING_TOKENS_SIZE` | ❌ | 512 | Chunk size in tokens |
-| `REQUEST_TIMEOUT_MS` | ❌ | 20000 | HTTP request timeout |
-| `CONCURRENCY` | ❌ | 2 | Max concurrent requests |
-
 ### Performance Tuning
 
 ```bash
@@ -179,14 +208,15 @@ CONCURRENCY=8
 EMBEDDING_TOKENS_SIZE=1024
 SIMILARITY_THRESHOLD=0.7
 REQUEST_TIMEOUT_MS=30000
+VECTOR_DB_MODE=thread
 
-# Memory-optimized setup  
+# Memory-optimized setup
 CONCURRENCY=1
 EMBEDDING_TOKENS_SIZE=256
 VECTOR_DB_MODE=inline
 
 # Accuracy-focused setup
-SIMILARITY_THRESHOLD=0.5
+SIMILARITY_THRESHOLD=0.7
 EMBEDDING_TOKENS_SIZE=512
 ```
 
@@ -195,7 +225,7 @@ EMBEDDING_TOKENS_SIZE=512
 ### Prerequisites
 
 - Node.js 20+ (22+ recommended)
-- npm 9+ 
+- npm 9+
 - Docker (optional, for containerized development)
 - Git
 
@@ -220,6 +250,26 @@ npm run build
 npm run health
 ```
 
+### Environment Setup
+
+Create `.env` file:
+
+```bash
+# Required
+GOOGLE_API_KEY=your_google_api_key_here
+GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
+EMBEDDING_SERVER_URL=https://api.openai.com/v1
+EMBEDDING_SERVER_API_KEY=your_openai_api_key_here
+EMBEDDING_MODEL_NAME=text-embedding-3-small  # Embedding model of your choice
+
+# Optional (with defaults)
+DATA_DIR=~/.mcp-search                   # Data storage location
+SIMILARITY_THRESHOLD=0.6                 # Similarity cutoff (0-1)
+EMBEDDING_TOKENS_SIZE=512               # Chunk size in tokens
+REQUEST_TIMEOUT_MS=20000                # HTTP timeout
+CONCURRENCY=2                           # Concurrent requests
+```
+
 ### Development Scripts
 
 ```bash
@@ -230,7 +280,7 @@ npm run build:watch          # Watch mode build
 
 # Testing
 npm test                      # Run all tests
-npm run test:unit            # Unit tests only  
+npm run test:unit            # Unit tests only
 npm run test:integration     # Integration tests only
 npm run test:coverage        # Coverage report
 npm run test:performance     # Performance benchmarks
@@ -282,7 +332,7 @@ npm run test:performance -- --verbose
                                 │
                                 │
                     ┌──────────────────┐    ┌─────────────────┐
-                    │    DuckDB        │    │   Vector        │  
+                    │    DuckDB        │    │   Vector        │
                     │   Database       │────│   Search        │
                     └──────────────────┘    └─────────────────┘
 ```
@@ -290,7 +340,7 @@ npm run test:performance -- --verbose
 ### Data Flow
 
 1. **Search Request**: Client sends MCP tool call
-2. **Content Fetching**: HTTP client retrieves web content  
+2. **Content Fetching**: HTTP client retrieves web content
 3. **Content Extraction**: Multi-stage extraction (Readability → Cheerio → SPA)
 4. **Semantic Chunking**: Intelligent content segmentation
 5. **Embedding Generation**: Vector representations via API
@@ -303,7 +353,7 @@ npm run test:performance -- --verbose
 - **MCP Server**: Protocol-compliant tool server
 - **HTTP Fetcher**: Robust content retrieval with retries
 - **Content Extractors**: Multi-strategy HTML processing
-- **Semantic Chunker**: Token-aware content segmentation  
+- **Semantic Chunker**: Token-aware content segmentation
 - **Vector Store**: DuckDB with VSS extension
 - **Embedding Service**: OpenAI-compatible API integration
 
@@ -339,7 +389,7 @@ services:
     volumes:
       - mcp_data:/app/data
     healthcheck:
-      test: ["CMD", "node", "dist/cli.js", "health"]
+      test: ['CMD', 'node', 'dist/cli.js', 'health']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -366,6 +416,7 @@ docker-compose exec mcp-search node dist/cli.js health --verbose
 ### Common Issues
 
 #### Environment Variables Missing
+
 ```bash
 # Check current environment
 mcp-search health --verbose
@@ -375,6 +426,7 @@ echo $GOOGLE_API_KEY | wc -c  # Should be >30 characters
 ```
 
 #### Database Issues
+
 ```bash
 # Check database status
 mcp-search inspect --stats
@@ -387,6 +439,7 @@ rm ~/.mcp-search/db/mpc.duckdb
 ```
 
 #### Performance Issues
+
 ```bash
 # Check system resources
 mcp-search health --verbose
@@ -399,11 +452,12 @@ export REQUEST_TIMEOUT_MS=30000
 ```
 
 #### Network/API Issues
+
 ```bash
 # Test Google API
 curl "https://www.googleapis.com/customsearch/v1?key=$GOOGLE_API_KEY&cx=$GOOGLE_SEARCH_ENGINE_ID&q=test"
 
-# Test embedding API  
+# Test embedding API
 curl -X POST "$EMBEDDING_SERVER_URL/embeddings" \
   -H "Authorization: Bearer $EMBEDDING_SERVER_API_KEY" \
   -H "Content-Type: application/json" \
@@ -435,28 +489,30 @@ npx @modelcontextprotocol/inspector mcp-search
 ### Tool Schemas
 
 #### `web.search`
+
 ```typescript
 interface SearchInput {
-  query: string | string[];        // Search queries
-  resultsPerQuery?: number;        // 1-50, default 5
+  query: string | string[]; // Search queries
+  resultsPerQuery?: number; // 1-50, default 5
 }
 
 interface SearchOutput {
   queries: Array<{
     query: string;
-    result: unknown;               // Raw Google JSON
+    result: unknown; // Raw Google JSON
   }>;
 }
 ```
 
-#### `web.readFromPage`  
+#### `web.readFromPage`
+
 ```typescript
 interface ReadFromPageInput {
-  url: string;                     // Target URL
-  query: string | string[];        // Search queries
-  forceRefresh?: boolean;         // Skip cache, default false
-  maxResults?: number;            // 1-50, default 8  
-  includeMetadata?: boolean;      // Extra metadata, default false
+  url: string; // Target URL
+  query: string | string[]; // Search queries
+  forceRefresh?: boolean; // Skip cache, default false
+  maxResults?: number; // 1-50, default 8
+  includeMetadata?: boolean; // Extra metadata, default false
 }
 
 interface ReadFromPageOutput {
@@ -466,13 +522,13 @@ interface ReadFromPageOutput {
   queries: Array<{
     query: string;
     results: Array<{
-      id: string;                  // Stable chunk ID
-      text: string;               // Content text  
-      score: number;              // Similarity score 0-1
-      sectionPath?: string[];     // Document structure
+      id: string; // Stable chunk ID
+      text: string; // Content text
+      score: number; // Similarity score 0-1
+      sectionPath?: string[]; // Document structure
     }>;
   }>;
-  note?: string;                  // Degradation notices
+  note?: string; // Degradation notices
 }
 ```
 
@@ -502,13 +558,13 @@ interface ReadFromPageOutput {
 # Version bump (patch/minor/major)
 npm version patch
 
-# Push tags  
+# Push tags
 git push origin --tags
 
 # GitHub Actions will:
 # 1. Run full test suite
 # 2. Security scan
-# 3. Build Docker images  
+# 3. Build Docker images
 # 4. Publish to NPM
 # 5. Create GitHub release
 ```
@@ -529,7 +585,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🙏 Acknowledgments
 
 - [Model Context Protocol](https://github.com/modelcontextprotocol/specification) - Protocol specification
-- [DuckDB](https://duckdb.org/) - In-process analytical database  
+- [DuckDB](https://duckdb.org/) - In-process analytical database
 - [VSS Extension](https://github.com/duckdb/duckdb_vss) - Vector similarity search
 - [Mozilla Readability](https://github.com/mozilla/readability) - Content extraction
 - [Playwright](https://playwright.dev/) - Browser automation
