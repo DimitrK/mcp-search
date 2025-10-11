@@ -21,6 +21,12 @@ const EnvironmentSchema = z.object({
   // Embedding-specific configuration
   EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(32).default(8),
 
+  // Search integration configuration
+  ENABLE_SIMILARITY_SEARCH: z
+    .union([z.literal('true'), z.literal('false')])
+    .default('true')
+    .optional(),
+
   // Vector DB execution mode
   VECTOR_DB_MODE: z.enum(['inline', 'thread', 'process']).default('inline').optional(),
   VECTOR_DB_RESTART_ON_CRASH: z.union([z.literal('true'), z.literal('false')]).optional(),

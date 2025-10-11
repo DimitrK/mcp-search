@@ -8,6 +8,14 @@ import { handleMcpError, ValidationError } from './errors';
 import { SearchInput, ReadFromPageInput, DebugEchoInput } from './schemas';
 import { handleWebSearch, handleReadFromPage, handleDebugEcho } from '../handlers/index';
 
+/**
+ * Context passed to handlers for progress notifications
+ */
+export interface HandlerContext {
+  progressToken?: string | number;
+  sendProgress: (progress: number, total?: number, message?: string) => Promise<void>;
+}
+
 // Create the MCP server instance
 export const mcpServer = new Server(
   {
@@ -57,15 +65,37 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async request => {
   try {
     childLogger.info({ tool: request.params.name }, 'Tool call received');
 
+    // Extract progress token from request metadata
+    const progressToken = request.params._meta?.progressToken;
+
+    // Create progress notification sender
+    const context: HandlerContext = {
+      progressToken,
+      sendProgress: async (progress: number, total?: number, message?: string) => {
+        if (progressToken) {
+          await mcpServer.notification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress,
+              ...(total !== undefined && { total }),
+              ...(message && { message }),
+            },
+          });
+          childLogger.debug({ progress, total, message }, 'Progress notification sent');
+        }
+      },
+    };
+
     switch (request.params.name) {
       case 'web.search':
         return await withTiming(childLogger, 'tool:web.search', async () =>
-          handleWebSearch(request.params.arguments, childLogger)
+          handleWebSearch(request.params.arguments, childLogger, context)
         );
 
       case 'web.readFromPage':
         return await withTiming(childLogger, 'tool:web.readFromPage', async () =>
-          handleReadFromPage(request.params.arguments, childLogger)
+          handleReadFromPage(request.params.arguments, childLogger, context)
         );
 
       case 'debug.echo':
