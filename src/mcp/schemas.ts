@@ -194,27 +194,6 @@ export const ReadFromPageOutput = z.object({
     .describe('Optional note about any issues or limitations encountered during processing'),
 });
 
-// debug.echo tool schemas
-export const DebugEchoInput = z.object({
-  message: z
-    .string()
-    .min(1, 'Message is required')
-    .describe('The message to echo back for debugging purposes'),
-  metadata: z
-    .record(z.unknown())
-    .optional()
-    .describe('Optional metadata object to include in the response'),
-});
-
-export const DebugEchoOutput = z.object({
-  echo: z.unknown().describe('The input that was echoed back'),
-  timestamp: z.string().describe('ISO timestamp when the echo was processed'),
-  metadata: z
-    .record(z.unknown())
-    .optional()
-    .describe('Optional metadata that was passed in the input'),
-});
-
 // Type exports
 export type SearchInputType = z.infer<typeof SearchInput>;
 export type SearchOutputType = z.infer<typeof SearchOutput>;
@@ -227,5 +206,3 @@ export type InPageMatchingReferencesType = z.infer<typeof InPageMatchingReferenc
 export type ReadFromPageInputType = z.infer<typeof ReadFromPageInput>;
 export type ReadFromPageOutputType = z.infer<typeof ReadFromPageOutput>;
 export type RelevantChunkType = z.infer<typeof RelevantChunk>;
-export type DebugEchoInputType = z.infer<typeof DebugEchoInput>;
-export type DebugEchoOutputType = z.infer<typeof DebugEchoOutput>;

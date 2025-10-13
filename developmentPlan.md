@@ -36,11 +36,6 @@ This development plan breaks down the MCP server implementation into incremental
    - Add basic logging setup with secret redaction
    - Ensure compatibility with MCP debugging/inspector tools
 
-5. **Hello World MCP Tool**
-   - Implement `debug.echo` tool that accepts any input and returns it
-   - Verify complete MCP request/response pipeline works end-to-end
-   - Test with MCP inspector to ensure tool registration and execution
-
 ### Acceptance Criteria:
 
 - [x] `npm run build` produces clean output in `dist/`
