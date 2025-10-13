@@ -5,8 +5,8 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import { APP_NAME, APP_VERSION, MCP_TOOL_DESCRIPTIONS } from '../config/constants';
 import { generateCorrelationId, createChildLogger, withTiming } from '../utils/logger';
 import { handleMcpError, ValidationError } from './errors';
-import { SearchInput, ReadFromPageInput, DebugEchoInput } from './schemas';
-import { handleWebSearch, handleReadFromPage, handleDebugEcho } from '../handlers/index';
+import { SearchInput, ReadFromPageInput } from './schemas';
+import { handleWebSearch, handleReadFromPage } from '../handlers/index';
 
 /**
  * Context passed to handlers for progress notifications
@@ -47,11 +47,6 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
         name: 'web.readFromPage',
         description: MCP_TOOL_DESCRIPTIONS.READ_FROM_PAGE,
         inputSchema: zodToJsonSchema(ReadFromPageInput),
-      },
-      {
-        name: 'debug.echo',
-        description: MCP_TOOL_DESCRIPTIONS.DEBUG_ECHO,
-        inputSchema: zodToJsonSchema(DebugEchoInput),
       },
     ],
   };
@@ -96,11 +91,6 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async request => {
       case 'web.readFromPage':
         return await withTiming(childLogger, 'tool:web.readFromPage', async () =>
           handleReadFromPage(request.params.arguments, childLogger, context)
-        );
-
-      case 'debug.echo':
-        return await withTiming(childLogger, 'tool:debug.echo', async () =>
-          handleDebugEcho(request.params.arguments, childLogger)
         );
 
       default:
