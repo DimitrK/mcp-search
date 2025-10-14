@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 import { EmbeddingIntegrationService } from '../../src/core/vector/embeddingIntegrationService';
-import { createEmbeddingProvider } from '../../src/core/vector/embeddingProvider';
 import { clearEmbeddingConfig } from '../../src/core/vector/store/meta';
 import type { ContentChunk } from '../../src/core/content/chunker';
+import type { EmbeddingProvider } from '../../src/core/vector/embeddingProvider';
 
 // Mock embedding provider that creates predictable embeddings for testing
 class MockEmbeddingProvider {
@@ -28,23 +28,35 @@ class MockEmbeddingProvider {
 }
 
 describe('Embedding Integration (End-to-End)', () => {
-  let service: EmbeddingIntegrationService;
+  let service: EmbeddingIntegrationService | null = null;
 
   beforeAll(async () => {
     // Clear any existing embedding config to start fresh
     await clearEmbeddingConfig();
+  });
 
-    // Create service with mock provider
+  beforeEach(() => {
+    // Create fresh service instance for each test
     const mockProvider = new MockEmbeddingProvider();
-    service = new EmbeddingIntegrationService(mockProvider as any);
+    service = new EmbeddingIntegrationService(mockProvider);
+  });
+
+  afterEach(async () => {
+    // Always cleanup service instances to prevent connection leaks
+    if (service) {
+      await service.close();
+      service = null;
+    }
   });
 
   afterAll(async () => {
-    await service.close();
+    // Final cleanup of global state
     await clearEmbeddingConfig();
   });
 
   test('should store chunks with embeddings and enable similarity search', async () => {
+    expect(service).not.toBeNull();
+
     const url = 'https://integration-test.com/article';
 
     // Create test chunks with diverse content
@@ -73,11 +85,11 @@ describe('Embedding Integration (End-to-End)', () => {
     ];
 
     // Store chunks with embeddings
-    await service.storeWithEmbeddings(url, chunks);
+    await service!.storeWithEmbeddings(url, chunks);
 
     // Test similarity search with query similar to chunk-1
     const similarQuery = 'artificial intelligence technology';
-    const results = await service.searchSimilar(url, similarQuery, 5);
+    const results = await service!.searchSimilar(url, similarQuery, 5);
 
     // Verify results
     expect(results).toHaveLength(3); // All chunks should be returned
@@ -93,7 +105,7 @@ describe('Embedding Integration (End-to-End)', () => {
 
     // Test search with query similar to chunk-2
     const mlQuery = 'machine learning patterns';
-    const mlResults = await service.searchSimilar(url, mlQuery, 5);
+    const mlResults = await service!.searchSimilar(url, mlQuery, 5);
 
     expect(mlResults).toHaveLength(3);
     // Verify we get results with content (order may vary)
@@ -133,7 +145,7 @@ describe('Embedding Integration (End-to-End)', () => {
 
     // This should fail because we already have a 3D embedding config
     const highDimProvider = new HighDimensionProvider();
-    const highDimService = new EmbeddingIntegrationService(highDimProvider as any);
+    const highDimService = new EmbeddingIntegrationService(highDimProvider);
 
     const chunks: ContentChunk[] = [
       {
@@ -154,6 +166,8 @@ describe('Embedding Integration (End-to-End)', () => {
   });
 
   test('should handle empty section paths correctly', async () => {
+    expect(service).not.toBeNull();
+
     const url = 'https://empty-sections.com';
     const chunks: ContentChunk[] = [
       {
@@ -166,15 +180,17 @@ describe('Embedding Integration (End-to-End)', () => {
     ];
 
     // Should not throw
-    await service.storeWithEmbeddings(url, chunks);
+    await service!.storeWithEmbeddings(url, chunks);
 
     // Search should work
-    const results = await service.searchSimilar(url, 'content hierarchy', 1);
+    const results = await service!.searchSimilar(url, 'content hierarchy', 1);
     expect(results).toHaveLength(1);
     expect(results[0].section_path).toBeFalsy(); // Should be null or undefined for empty paths
   });
 
   test('should maintain consistency across multiple batches', async () => {
+    expect(service).not.toBeNull();
+
     const url = 'https://batch-test.com';
 
     // Create a large number of chunks to trigger batching
@@ -187,10 +203,10 @@ describe('Embedding Integration (End-to-End)', () => {
     }));
 
     // Store all chunks
-    await service.storeWithEmbeddings(url, chunks);
+    await service!.storeWithEmbeddings(url, chunks);
 
     // Verify we can search across all batches
-    const results = await service.searchSimilar(url, 'batch test content', 10);
+    const results = await service!.searchSimilar(url, 'batch test content', 10);
     expect(results).toHaveLength(10); // Should get top 10 matches
 
     // All results should have valid section paths
