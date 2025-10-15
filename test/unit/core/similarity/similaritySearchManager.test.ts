@@ -1,17 +1,16 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { SimilaritySearchManager } from '../../../../src/core/similarity/similaritySearchManager';
 import { createEmbeddingProvider } from '../../../../src/core/vector/embeddingProvider';
 import { EmbeddingIntegrationService } from '../../../../src/core/vector/embeddingIntegrationService';
 import type { ContentChunk } from '../../../../src/core/content/chunker';
 import { consolidateOverlappingChunks } from '../../../../src/core/content/chunkConsolidator';
+import { getEnvironment } from '../../../../src/config/environment';
 
 // Mock dependencies
 jest.mock('../../../../src/core/vector/embeddingProvider');
 jest.mock('../../../../src/core/vector/embeddingIntegrationService');
 jest.mock('../../../../src/core/content/chunkConsolidator');
-jest.mock('../../../../src/config/environment', () => ({
-  getEnvironment: jest.fn(),
-}));
+jest.mock('../../../../src/config/environment');
 jest.mock('../../../../src/utils/logger', () => ({
   createChildLogger: jest.fn(() => ({
     debug: jest.fn(),
@@ -39,6 +38,8 @@ describe('SimilaritySearchManager', () => {
   let mockEmbeddingProvider: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockEmbeddingService: any;
+  // Shared manager instance for cleanup
+  let manager: SimilaritySearchManager | null = null;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -55,10 +56,7 @@ describe('SimilaritySearchManager', () => {
     };
 
     // Mock getEnvironment
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mockGetEnvironment = jest.mocked(
-      require('../../../../src/config/environment').getEnvironment
-    );
+    const mockGetEnvironment = jest.mocked(getEnvironment);
     mockGetEnvironment.mockReturnValue({
       EMBEDDING_SERVER_URL: 'https://test.embedding.server',
       EMBEDDING_SERVER_API_KEY: 'test-embedding-api-key',
@@ -95,9 +93,17 @@ describe('SimilaritySearchManager', () => {
     mockEmbeddingIntegrationService.mockReturnValue(mockEmbeddingService as any);
   });
 
+  afterEach(async () => {
+    // Always cleanup manager instances to prevent connection leaks
+    if (manager) {
+      await manager.close();
+      manager = null;
+    }
+  });
+
   describe('create', () => {
     it('should create a manager instance successfully', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger, {
+      manager = await SimilaritySearchManager.create(mockLogger, {
         correlationId: 'test-correlation',
       });
 
@@ -115,7 +121,7 @@ describe('SimilaritySearchManager', () => {
     it('should return null when embedding provider initialization fails (graceful degradation)', async () => {
       mockCreateEmbeddingProvider.mockRejectedValue(new Error('Embedding service unavailable'));
 
-      const manager = await SimilaritySearchManager.create(mockLogger, {
+      manager = await SimilaritySearchManager.create(mockLogger, {
         correlationId: 'test-correlation',
       });
 
@@ -126,7 +132,7 @@ describe('SimilaritySearchManager', () => {
 
   describe('storeWithEmbeddings', () => {
     it('should store content chunks with embeddings', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       const chunks: ContentChunk[] = [
@@ -153,7 +159,7 @@ describe('SimilaritySearchManager', () => {
 
   describe('searchSimilar', () => {
     it('should perform similarity search and return consolidated results', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       const mockSearchResults = [
@@ -182,12 +188,9 @@ describe('SimilaritySearchManager', () => {
       mockEmbeddingService.searchSimilar.mockResolvedValue(mockSearchResults);
       mockConsolidateOverlappingChunks.mockReturnValue(mockConsolidatedResults);
 
-      const results = await manager!.searchSimilar(
-        'https://example.com',
-        'test query',
-        10,
-        { correlationId: 'test' }
-      );
+      const results = await manager!.searchSimilar('https://example.com', 'test query', 10, {
+        correlationId: 'test',
+      });
 
       expect(mockEmbeddingService.searchSimilar).toHaveBeenCalledWith(
         'https://example.com',
@@ -201,24 +204,21 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should return empty array on search failure (graceful degradation)', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue(new Error('Search failed'));
 
-      const results = await manager!.searchSimilar(
-        'https://example.com',
-        'test query',
-        10,
-        { correlationId: 'test' }
-      );
+      const results = await manager!.searchSimilar('https://example.com', 'test query', 10, {
+        correlationId: 'test',
+      });
 
       expect(results).toEqual([]);
       expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('should classify timeout errors correctly', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue(new Error('Request timeout'));
@@ -236,7 +236,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should classify rate limit errors correctly', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue(new Error('Rate limit exceeded: 429'));
@@ -254,7 +254,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should classify database errors correctly', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue(new Error('Database connection failed'));
@@ -274,7 +274,7 @@ describe('SimilaritySearchManager', () => {
 
   describe('searchMultiple', () => {
     it('should process multiple queries in parallel with concurrency control', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       const mockSearchResults = [
@@ -307,7 +307,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should handle individual query failures gracefully', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       let callCount = 0;
@@ -341,7 +341,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should use default concurrency from environment', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockResolvedValue([]);
@@ -356,7 +356,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should process single query correctly', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       const mockSearchResults = [
@@ -381,7 +381,7 @@ describe('SimilaritySearchManager', () => {
 
   describe('close', () => {
     it('should close embedding service successfully', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       await manager!.close();
@@ -390,7 +390,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should handle close errors gracefully without throwing', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.close.mockRejectedValue(new Error('Close failed'));
@@ -403,7 +403,7 @@ describe('SimilaritySearchManager', () => {
 
   describe('error classification', () => {
     it('should handle non-Error objects', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue('String error');
@@ -420,7 +420,7 @@ describe('SimilaritySearchManager', () => {
     });
 
     it('should classify HTTP status errors', async () => {
-      const manager = await SimilaritySearchManager.create(mockLogger);
+      manager = await SimilaritySearchManager.create(mockLogger);
       expect(manager).not.toBeNull();
 
       mockEmbeddingService.searchSimilar.mockRejectedValue(

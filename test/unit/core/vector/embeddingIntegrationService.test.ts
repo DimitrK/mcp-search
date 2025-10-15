@@ -19,7 +19,10 @@ jest.mock('../../../../src/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   })),
-  withTiming: jest.fn(async (logger: any, name: string, fn: () => Promise<any>) => await fn()),
+  withTiming: jest.fn(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (logger: any, name: string, fn: () => Promise<any>) => await fn()
+  ),
   generateCorrelationId: jest.fn(() => 'test-correlation-id'),
 }));
 
@@ -37,7 +40,7 @@ const mockedSimilaritySearch = vectorStore.similaritySearch as jest.MockedFuncti
 
 describe('EmbeddingIntegrationService', () => {
   let mockEmbeddingProvider: jest.Mocked<EmbeddingProvider>;
-  let service: EmbeddingIntegrationService;
+  let service: EmbeddingIntegrationService | null = null;
 
   beforeEach(() => {
     // Create a mock embedding provider
@@ -52,7 +55,12 @@ describe('EmbeddingIntegrationService', () => {
     jest.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Always cleanup service instances to prevent connection leaks
+    if (service) {
+      await service!.close();
+      service = null;
+    }
     jest.clearAllMocks();
   });
 
@@ -104,7 +112,7 @@ describe('EmbeddingIntegrationService', () => {
       mockedUpsertChunks.mockResolvedValue();
 
       // Act
-      await service.storeWithEmbeddings(url, chunks);
+      await service!.storeWithEmbeddings(url, chunks);
 
       // Assert
       expect(mockedEnsureEmbeddingConfig).toHaveBeenCalledWith(
@@ -158,7 +166,7 @@ describe('EmbeddingIntegrationService', () => {
       mockedEnsureEmbeddingConfig.mockResolvedValue();
       mockedUpsertChunks.mockResolvedValue();
 
-      await service.storeWithEmbeddings(url, chunks);
+      await service!.storeWithEmbeddings(url, chunks);
 
       expect(mockedUpsertChunks).toHaveBeenCalledWith(
         [
@@ -191,7 +199,7 @@ describe('EmbeddingIntegrationService', () => {
         new EmbeddingError('API rate limit exceeded', 'http')
       );
 
-      await expect(service.storeWithEmbeddings(url, chunks)).rejects.toThrow(
+      await expect(service!.storeWithEmbeddings(url, chunks)).rejects.toThrow(
         'API rate limit exceeded'
       );
 
@@ -216,7 +224,7 @@ describe('EmbeddingIntegrationService', () => {
       mockEmbeddingProvider.embed.mockResolvedValue(mockEmbeddings);
       mockedEnsureEmbeddingConfig.mockRejectedValue(new Error('Dimension mismatch'));
 
-      await expect(service.storeWithEmbeddings(url, chunks)).rejects.toThrow('Dimension mismatch');
+      await expect(service!.storeWithEmbeddings(url, chunks)).rejects.toThrow('Dimension mismatch');
 
       // Ensure we didn't try to store chunks after config failure
       expect(mockedUpsertChunks).not.toHaveBeenCalled();
@@ -226,7 +234,7 @@ describe('EmbeddingIntegrationService', () => {
       const url = 'https://example.com';
       const chunks: ContentChunk[] = [];
 
-      await service.storeWithEmbeddings(url, chunks);
+      await service!.storeWithEmbeddings(url, chunks);
 
       // Should not call any provider or storage functions
       expect(mockEmbeddingProvider.embed).not.toHaveBeenCalled();
@@ -258,7 +266,7 @@ describe('EmbeddingIntegrationService', () => {
       mockedSimilaritySearch.mockResolvedValue(mockResults);
 
       // Act
-      const results = await service.searchSimilar(url, queryText, limit);
+      const results = await service!.searchSimilar(url, queryText, limit);
 
       // Assert
       expect(mockEmbeddingProvider.embed).toHaveBeenCalledWith([queryText]);
@@ -275,7 +283,7 @@ describe('EmbeddingIntegrationService', () => {
         new EmbeddingError('Embedding service unavailable', 'http')
       );
 
-      await expect(service.searchSimilar(url, queryText, limit)).rejects.toThrow(
+      await expect(service!.searchSimilar(url, queryText, limit)).rejects.toThrow(
         'Embedding service unavailable'
       );
 
@@ -291,7 +299,7 @@ describe('EmbeddingIntegrationService', () => {
       mockEmbeddingProvider.embed.mockResolvedValue([queryEmbedding]);
       mockedSimilaritySearch.mockRejectedValue(new Error('Database connection failed'));
 
-      await expect(service.searchSimilar(url, queryText, limit)).rejects.toThrow(
+      await expect(service!.searchSimilar(url, queryText, limit)).rejects.toThrow(
         'Database connection failed'
       );
     });
@@ -305,7 +313,7 @@ describe('EmbeddingIntegrationService', () => {
     });
 
     test('should close embedding provider', async () => {
-      await service.close();
+      await service!.close();
       expect(mockEmbeddingProvider.close).toHaveBeenCalledTimes(1);
     });
 
@@ -313,7 +321,7 @@ describe('EmbeddingIntegrationService', () => {
       mockEmbeddingProvider.close.mockRejectedValue(new Error('Close failed'));
 
       // Should not throw
-      await expect(service.close()).resolves.not.toThrow();
+      await expect(service!.close()).resolves.not.toThrow();
     });
   });
 });
