@@ -34,6 +34,7 @@ describe('duckdbVectorStore init', () => {
   test('initializes schema and returns connection', async () => {
     const db = await initDuckDb();
     expect(db).toBeTruthy();
-    expect(getDatabasePath()).toContain('mcp.duckdb');
+    // Database path should include model name: mcp-{model-name}.duckdb
+    expect(getDatabasePath()).toMatch(/mcp-[a-z0-9-]+\.duckdb$/);
   });
 });

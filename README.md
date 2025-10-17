@@ -117,7 +117,246 @@ npx playwright@1.55.1 install --with-deps chromium
 | `CONCURRENCY`              | ❌       | 2               | Max concurrent requests             |
 | `VECTOR_DB_MODE`           | ❌       | `inline`        | `inline`, `thead` or `process`      |
 
-## 📖 Using it as a library
+## � Data Persistence & Storage
+
+### How Embeddings Are Stored
+
+MCP Search uses **DuckDB** with the **VSS (Vector Similarity Search)** extension to store embeddings locally in a single file:
+
+**Database File**: `{DATA_DIR}/db/mcp.duckdb`
+
+**What's Stored**:
+- Document metadata (URL, title, last crawled timestamp, ETag)
+- Text chunks with section paths and token counts
+- Vector embeddings (dimension varies by model)
+- Embedding configuration (model name, dimension)
+
+### Storage Locations by Deployment Method
+
+#### NPX Deployment
+
+When using `npx @dimitrk/mcp-search`, the database is stored in your OS-specific application data directory:
+
+| Operating System | Default Location |
+|-----------------|------------------|
+| **macOS** | `~/Library/Application Support/mcp-search/db/mcp.duckdb` |
+| **Linux** | `~/.local/share/mcp-search/db/mcp.duckdb` |
+| **Windows** | `%LOCALAPPDATA%\mcp-search\db\mcp.duckdb` |
+
+**Custom Location**: Override with `DATA_DIR` environment variable:
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "env": {
+        "DATA_DIR": "/path/to/custom/location"
+      }
+    }
+  }
+}
+```
+
+**Persistence**: ✅ Data persists across runs and system restarts
+
+#### Docker Deployment
+
+**Container Path**: `/app/data/db/mcp.duckdb` (set via `ENV DATA_DIR=/app/data` in Dockerfile)
+
+**⚠️ Important**: Without a volume mount, data is **lost when the container stops** (due to `--rm` flag).
+
+**Recommended**: Use a **named volume** for persistence:
+
+```json
+{
+  "args": [
+    "run", "-i", "--rm",
+    "-v", "mcp_data:/app/data",  // ← Named volume for persistence
+    "mcp-search:latest"
+  ]
+}
+```
+
+**Volume Management**:
+```bash
+# List volumes
+docker volume ls
+
+# Inspect volume location
+docker volume inspect mcp_data
+
+# Backup volume
+docker run --rm -v mcp_data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/mcp-backup.tar.gz -C /data .
+
+# Restore volume
+docker run --rm -v mcp_data:/data -v $(pwd):/backup \
+  alpine tar xzf /backup/mcp-backup.tar.gz -C /data
+
+# Delete volume (careful!)
+docker volume rm mcp_data
+```
+
+**Alternative**: Use a **bind mount** for direct access:
+```bash
+docker run -i --rm \
+  -v ./data:/app/data \  # Bind mount to local ./data directory
+  mcp-search:latest
+```
+- ✅ Direct access to database file on host
+- ✅ Easy backup (just copy `./data` directory)
+- ⚠️ **Permissions**: Container runs as UID 1001, ensure directory is writable
+
+### Database Size & Performance
+
+**Typical Sizes** (varies by usage):
+- Empty database: ~100 KB
+- 10 pages cached: ~5-10 MB (depends on model dimension)
+- 100 pages cached: ~50-100 MB
+- 1000 pages cached: ~500 MB - 1 GB
+
+**Performance Characteristics**:
+- **Cached queries**: P50 < 300ms (reads from disk)
+- **First-time extraction**: 2-5s (depends on page size and network)
+- **Embedding generation**: Depends on external service (OpenAI: ~500ms for batch of 8)
+
+### Maintenance & Cleanup
+
+```bash
+# Check database health and size
+mcp-search health --verbose
+
+# Inspect what's stored
+mcp-search inspect --stats
+
+# Clean old cached data (default: >30 days)
+mcp-search cleanup --days 30
+
+# Clean and optimize database
+mcp-search cleanup --days 7 --vacuum
+
+# Preview what would be deleted (dry run)
+mcp-search cleanup --dry-run
+```
+
+### Configuration Changes & Migration
+
+**Important**: Changing certain configuration options has significant impacts on your cached data:
+
+#### ✅ Safe Changes (No Data Loss)
+
+**`EMBEDDING_TOKENS_SIZE` (Chunk Size)**
+- Changing from 512 → 1024 tokens is **safe**
+- Existing chunks remain with original size
+- New content uses new chunk size
+- All chunks coexist and are searchable together
+
+**`SIMILARITY_THRESHOLD`**
+- Safe to change anytime
+- Only affects which results are returned
+- No impact on stored data
+
+#### ⚠️ Destructive Changes (Data Loss)
+
+**Embedding Provider Change** (e.g., OpenAI → Cohere)
+- **Runtime Error**: `Embedding model mismatch: text-embedding-3-small != embed-english-v3.0`
+- **Impact**: Server refuses to start with existing database
+- **Solutions**:
+  ```bash
+  # Option 1: Use separate DATA_DIR for different models
+  DATA_DIR=~/.mcp-search-openai EMBEDDING_MODEL_NAME=text-embedding-3-small
+  DATA_DIR=~/.mcp-search-cohere EMBEDDING_MODEL_NAME=embed-english-v3.0
+  
+  # Option 2: Clean database and re-cache everything
+  mcp-search cleanup --days 0  # Deletes all cached embeddings
+  ```
+
+**Embedding Dimension Change** (Different model with different dimension)
+- **Automatic**: Chunks table is **dropped and recreated**
+- **Impact**: All cached embeddings are **deleted** (documents table preserved)
+- **What's Lost**: Vector embeddings only (must re-fetch and re-embed pages)
+- **What's Kept**: Document metadata (URLs, titles, ETags, timestamps)
+- **Log Message**: `Embedding dimension changed - recreating chunks table`
+
+**Example Scenario**:
+```bash
+# Start with text-embedding-3-small (1536 dimensions)
+EMBEDDING_MODEL_NAME=text-embedding-3-small
+
+# Switch to text-embedding-3-large (3072 dimensions)
+EMBEDDING_MODEL_NAME=text-embedding-3-large
+# → Automatic: Drops chunks table, keeps documents
+# → Next page fetch: Re-embeds content with new model
+```
+
+#### 📊 Migration Impact Summary
+
+| Change | Model Check | Dimension Check | Data Impact |
+|--------|-------------|-----------------|-------------|
+| Chunk size (512→1024) | ✅ N/A | ✅ N/A | ✅ None - coexist |
+| Same model, same dimension | ✅ Pass | ✅ Pass | ✅ None |
+| Different model name | ❌ **Blocks** | - | ❌ Runtime error |
+| Same model, different dimension | ✅ Pass | ⚠️ **Auto-drop** | ⚠️ Embeddings deleted |
+| Different model + dimension | ❌ **Blocks** | - | ❌ Runtime error |
+
+**Best Practice**: The server automatically creates separate database files for each embedding model (e.g., `mcp-text-embedding-3-small.duckdb`, `mcp-embed-english-v3-0.duckdb`). You can safely switch between models in the same `DATA_DIR`.
+
+### Data Isolation & Multi-Tenancy
+
+**Per-Model Database Isolation** (v0.1.4+):
+- Each embedding model automatically gets its own database file within `DATA_DIR/db/`
+- Database filename includes sanitized model name: `mcp-{model-name}.duckdb`
+- Safe to switch between models without data loss or conflicts
+- Different models can coexist in the same `DATA_DIR`
+
+**Example Database Files**:
+```
+~/.local/share/mcp-search/db/
+├── mcp-text-embedding-3-small.duckdb    # OpenAI model
+├── mcp-text-embedding-3-large.duckdb    # OpenAI larger model
+└── mcp-embed-english-v3-0.duckdb        # Cohere model
+```
+
+Each `DATA_DIR` can contain **multiple model databases**:
+- No cross-contamination between models
+- Dimension changes only affect that model's database
+- Easy A/B testing by switching `EMBEDDING_MODEL_NAME`
+
+**Example - Single Instance, Multiple Models**:
+```bash
+# Start with OpenAI model
+EMBEDDING_MODEL_NAME=text-embedding-3-small npx @dimitrk/mcp-search
+
+# Later switch to Cohere (both DBs coexist)
+EMBEDDING_MODEL_NAME=embed-english-v3.0 npx @dimitrk/mcp-search
+```
+
+**Legacy Multi-Instance Pattern** (still supported):
+If you prefer complete isolation, run separate instances with different `DATA_DIR` values:
+
+```json
+{
+  "mcpServers": {
+    "web-search-openai": {
+      "command": "npx",
+      "args": ["-y", "@dimitrk/mcp-search"],
+      "env": {
+        "DATA_DIR": "~/.mcp-search-openai",
+        "EMBEDDING_MODEL_NAME": "text-embedding-3-small"
+      }
+    },
+    "web-search-cohere": {
+      "command": "npx",
+      "args": ["-y", "@dimitrk/mcp-search"],
+      "env": {
+        "DATA_DIR": "~/.mcp-search-cohere",
+        "EMBEDDING_MODEL_NAME": "embed-english-v3.0"
+      }
+    }
+  }
+}
+```
+
+## �📖 Using it as a library
 
 ### Command Line Interface
 

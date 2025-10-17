@@ -31,7 +31,7 @@
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
     "build:watch": "npm run build:js && npm run build:types -- --watch",
     "dev": "tsx src/cli.ts server",
-    "debug": "npm run build && npx @modelcontextprotocol/inspector -e DATA_DIR=.mcp-search-dev -e SIMILARITY_THRESHOLD=0.6 -e EMBEDDING_TOKENS_SIZE=1024 -e REQUEST_TIMEOUT_MS=20000 -e CONCURRENCY=2 -e VECTOR_DB_MODE=thread -e VECTOR_DB_RESTART_ON_CRASH=true -e GOOGLE_API_KEY=mock -e GOOGLE_SEARCH_ENGINE_ID=mock -e EMBEDDING_SERVER_URL=http://127.0.0.1:2020 -e EMBEDDING_SERVER_API_KEY=mock -e EMBEDDING_MODEL_NAME=text-embedding-qwen3-embedding-0.6b node dist/cli.js server",
+    "debug": "npm run build && npx @modelcontextprotocol/inspector -e DATA_DIR=.mcp-search-dev -e SIMILARITY_THRESHOLD=0.5 -e EMBEDDING_TOKENS_SIZE=1024 -e REQUEST_TIMEOUT_MS=40000 -e CONCURRENCY=2 -e VECTOR_DB_MODE=thread -e VECTOR_DB_RESTART_ON_CRASH=true -e GOOGLE_API_KEY=AIzaSyDqBnxnJhDQt2WqvEu-1Lt1N8OZzo1R9b0 -e GOOGLE_SEARCH_ENGINE_ID=75e268b06e60140d9 -e EMBEDDING_SERVER_URL=http://127.0.0.1:2020 -e EMBEDDING_SERVER_API_KEY=mock -e EMBEDDING_MODEL_NAME=text-embedding-qwen3-embedding-0.6b node dist/cli.js server",
     "lint": "eslint src/ --ext .ts,.js",
     "lint:fix": "eslint src/ --ext .ts,.js --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",

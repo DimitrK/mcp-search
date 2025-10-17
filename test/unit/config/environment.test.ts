@@ -50,7 +50,10 @@ describe('Environment Configuration', () => {
   test('should provide database path', () => {
     const dbPath = getDatabasePath();
     expect(dbPath).toBeTruthy();
-    expect(dbPath).toContain('mcp.duckdb');
+    // Database path should include model name: mcp-{model-name}.duckdb
+    expect(dbPath).toMatch(/mcp-[a-z0-9-]+\.duckdb$/);
+    // For the test model name 'text-embedding-ada-002', should be sanitized to 'text-embedding-ada-002'
+    expect(dbPath).toContain('mcp-text-embedding-ada-002.duckdb');
   });
 
   test('should parse custom similarity threshold', () => {

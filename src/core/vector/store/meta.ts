@@ -28,21 +28,31 @@ export async function ensureEmbeddingConfig(
         const existingModel = modelRows[0]?.value;
         const existingDim = dimRows[0]?.value ? Number(dimRows[0].value) : undefined;
 
+        // With per-model database files, model mismatch should be impossible
+        // But keep the check as a safety guard with a clear message
         if (existingModel && existingModel !== modelName) {
-          throw new DatabaseError(`Embedding model mismatch: ${existingModel} != ${modelName}`);
+          throw new DatabaseError(
+            `Embedding model mismatch in database file: expected ${modelName}, found ${existingModel}. ` +
+              `This should not happen with per-model database files. Database may be corrupted.`
+          );
+        }
+
+        // Dimension mismatch with same model indicates configuration change
+        // With per-model DBs, we can safely recreate without losing other models' data
+        if (existingDim !== undefined && existingDim !== dimension) {
+          log?.warn(
+            { existingDim, newDim: dimension, modelName },
+            `Embedding dimension changed for model ${modelName} - recreating chunks table. ` +
+              `This will delete all cached embeddings for this model.`
+          );
         }
 
         // Handle chunks table creation/recreation
         const needsChunksTable = existingDim === undefined || existingDim !== dimension;
 
         if (needsChunksTable) {
-          if (existingDim !== undefined) {
-            log?.warn(
-              { existingDim, newDim: dimension },
-              'Embedding dimension changed - recreating chunks table'
-            );
-          } else {
-            log?.info({ dimension }, 'Creating chunks table with embedding dimension');
+          if (existingDim === undefined) {
+            log?.info({ dimension, modelName }, 'Creating chunks table for new model');
           }
 
           // Drop and recreate chunks table with correct dimension
@@ -62,10 +72,13 @@ export async function ensureEmbeddingConfig(
           );
           await promisifyRun(conn, `CREATE INDEX IF NOT EXISTS chunks_url_idx ON chunks(url);`);
 
-          log?.info({ dimension }, 'Chunks table ready with correct embedding dimension');
+          log?.info(
+            { dimension, modelName },
+            'Chunks table ready with correct embedding dimension'
+          );
         }
 
-        // Update embedding configuration
+        // Update embedding configuration metadata
         if (!existingModel) {
           await promisifyRunParams(
             conn,
