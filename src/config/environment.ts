@@ -112,7 +112,19 @@ export function getDataDirectory(): string {
 }
 
 export function getDatabasePath(): string {
-  return join(getDataDirectory(), 'db', 'mcp.duckdb');
+  const env = getEnvironment();
+  const modelName = env.EMBEDDING_MODEL_NAME;
+
+  // Sanitize model name for safe filename (replace special chars with hyphens)
+  const safeModelName = modelName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+
+  // Use model-specific database file: mcp-{model-name}.duckdb
+  const dbFileName = `mcp-${safeModelName}.duckdb`;
+
+  return join(getDataDirectory(), 'db', dbFileName);
 }
 
 // For testing purposes
