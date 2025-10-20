@@ -428,10 +428,18 @@ class SemanticChunker {
     sectionPath: string[];
     overlapTokens: number;
   } {
-    const text = chunkData.blocks
+    // Prepend section path as heading for embedding context
+    const contextPrefix =
+      chunkData.startingSectionPath.length > 0
+        ? `# ${chunkData.startingSectionPath.join(' > ')}\n\n`
+        : '';
+
+    const blockText = chunkData.blocks
       .map(b => b.text)
       .join('\n\n')
       .trim();
+
+    const text = contextPrefix + blockText;
 
     // Use the starting section path (where the chunk begins)
     const sectionPath = [...chunkData.startingSectionPath];

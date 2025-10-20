@@ -112,6 +112,57 @@ This is the final section with concluding remarks.`,
     });
   });
 
+  describe('section heading inclusion', () => {
+    it('should include section path as heading prefix in chunk text', () => {
+      const chunks = semanticChunker.chunk(mockExtractionResult, {
+        maxTokens: 100,
+        overlapPercentage: 0,
+      });
+
+      // Find chunk with section path
+      const sectionChunk = chunks.find(c => c.sectionPath.length > 0);
+      expect(sectionChunk).toBeDefined();
+
+      // Should include section heading in text
+      expect(sectionChunk!.text).toMatch(/^# /); // Starts with markdown heading
+      expect(sectionChunk!.text).toContain(sectionChunk!.sectionPath.join(' > '));
+    });
+
+    it('should format multi-level section paths correctly', () => {
+      const chunks = semanticChunker.chunk(mockExtractionResult, {
+        maxTokens: 50,
+        overlapPercentage: 0,
+      });
+
+      // Find chunk with nested section path
+      const nestedChunk = chunks.find(c => c.sectionPath.length > 1);
+      expect(nestedChunk).toBeDefined();
+
+      // Should format as "# Parent > Child"
+      const expectedPrefix = `# ${nestedChunk!.sectionPath.join(' > ')}\n\n`;
+      expect(nestedChunk!.text.startsWith(expectedPrefix)).toBe(true);
+    });
+
+    it('should not add heading prefix for chunks without section path', () => {
+      // Create extraction result without semantic info
+      const noSemanticResult: ExtractionResult = {
+        markdownContent: 'Just plain content without headings.',
+        textContent: 'Just plain content without headings.',
+        sectionPaths: [],
+        semanticInfo: undefined,
+        title: 'Test',
+        extractionMethod: 'cheerio',
+      };
+
+      const chunks = semanticChunker.chunk(noSemanticResult, { maxTokens: 100 });
+
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].sectionPath).toEqual([]);
+      expect(chunks[0].text).not.toMatch(/^# /);
+      expect(chunks[0].text).toBe('Just plain content without headings.');
+    });
+  });
+
   describe('semantic boundary handling', () => {
     it('should prefer heading boundaries over arbitrary splits', () => {
       const chunks = semanticChunker.chunk(mockExtractionResult, { maxTokens: 40 });
