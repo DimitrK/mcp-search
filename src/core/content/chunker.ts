@@ -505,6 +505,13 @@ class SemanticChunker {
       const currentChunk = chunks[i];
       const previousChunk = chunks[i - 1];
 
+      // Only add overlap if sections are related (same top-level or parent-child)
+      if (!this.sectionsRelated(previousChunk.sectionPath, currentChunk.sectionPath)) {
+        // Different sections - no overlap
+        result.push(currentChunk);
+        continue;
+      }
+
       const currentTokens = this.estimateTokens(currentChunk.text);
       const overlapTokensTarget = Math.ceil(currentTokens * (overlapPercentage / 100));
 
@@ -525,6 +532,19 @@ class SemanticChunker {
     }
 
     return result;
+  }
+
+  /**
+   * Check if two section paths are related (same top-level section)
+   */
+  private sectionsRelated(path1: string[], path2: string[]): boolean {
+    // Both must have at least one section level
+    if (path1.length === 0 || path2.length === 0) {
+      return false;
+    }
+
+    // Same top-level section means related
+    return path1[0] === path2[0];
   }
 
   /**

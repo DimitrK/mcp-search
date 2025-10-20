@@ -251,6 +251,117 @@ This is the final section with concluding remarks.`,
         expect(chunk.overlapTokens).toBe(0);
       });
     });
+
+    it('should NOT add overlap when section path changes (different top-level sections)', () => {
+      const multiSectionResult: ExtractionResult = {
+        title: 'Multi-Section Document',
+        markdownContent: `# Section A
+Content from section A paragraph one.
+
+# Section B
+Content from section B paragraph one.`,
+        textContent: 'Content from section A paragraph one. Content from section B paragraph one.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [
+            { level: 1, text: 'Section A', position: 0 },
+            { level: 1, text: 'Section B', position: 50 },
+          ],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 14,
+          characterCount: 120,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(multiSectionResult, {
+        maxTokens: 20,
+        overlapPercentage: 20,
+      });
+
+      // Find chunks from different sections
+      const sectionAChunk = chunks.find(c => c.sectionPath[0] === 'Section A');
+      const sectionBChunk = chunks.find(c => c.sectionPath[0] === 'Section B');
+
+      expect(sectionAChunk).toBeDefined();
+      expect(sectionBChunk).toBeDefined();
+
+      // Section B chunk should NOT have overlap from Section A
+      if (sectionBChunk) {
+        expect(sectionBChunk.overlapTokens).toBe(0);
+        expect(sectionBChunk.text).not.toContain('section A');
+      }
+    });
+
+    it('should add overlap for consecutive chunks in the same top-level section', () => {
+      const sameSectionResult: ExtractionResult = {
+        title: 'Same Section Document',
+        markdownContent: `# Main Section
+## Subsection A
+This is content in subsection A with enough text to create multiple chunks when we use a small token limit.
+
+## Subsection B
+This is content in subsection B which is under the same main section.`,
+        textContent:
+          'This is content in subsection A with enough text to create multiple chunks when we use a small token limit. This is content in subsection B which is under the same main section.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [
+            { level: 1, text: 'Main Section', position: 0 },
+            { level: 2, text: 'Subsection A', position: 20 },
+            { level: 2, text: 'Subsection B', position: 100 },
+          ],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 32,
+          characterCount: 200,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(sameSectionResult, {
+        maxTokens: 30,
+        overlapPercentage: 15,
+      });
+
+      // Find chunks from same main section
+      const mainSectionChunks = chunks.filter(c => c.sectionPath[0] === 'Main Section');
+
+      // Should have multiple chunks under same main section
+      expect(mainSectionChunks.length).toBeGreaterThan(1);
+
+      // Check if subsequent chunks have overlap (except the first)
+      const hasOverlap = mainSectionChunks.slice(1).some(chunk => chunk.overlapTokens > 0);
+      expect(hasOverlap).toBe(true);
+    });
+
+    it('should handle chunks with empty section paths (no overlap)', () => {
+      const noSemanticResult: ExtractionResult = {
+        title: 'Plain Document',
+        markdownContent: 'First paragraph of content. Second paragraph of content.',
+        textContent: 'First paragraph of content. Second paragraph of content.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: undefined,
+      };
+
+      const chunks = semanticChunker.chunk(noSemanticResult, {
+        maxTokens: 15,
+        overlapPercentage: 20,
+      });
+
+      // All chunks should have empty section paths
+      chunks.forEach(chunk => {
+        expect(chunk.sectionPath).toEqual([]);
+      });
+
+      // Chunks without section paths should not get overlap
+      // (sectionsRelated returns false for empty paths)
+      chunks.slice(1).forEach(chunk => {
+        expect(chunk.overlapTokens).toBe(0);
+      });
+    });
   });
 
   describe('edge cases and error handling', () => {
