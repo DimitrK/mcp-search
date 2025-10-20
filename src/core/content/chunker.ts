@@ -27,6 +27,16 @@ class SemanticChunker {
   private readonly DEFAULT_OVERLAP_PERCENTAGE = 15;
   private readonly CHARS_PER_TOKEN = 4;
 
+  private readonly CHARS_PER_TOKEN_RATIO: Record<string, number> = {
+    code: 2.5, // Code is token-dense (symbols, short identifiers)
+    table: 3.0, // Tables have structure characters and delimiters
+    list: 3.5, // Lists have bullets/numbers and formatting
+    paragraph: 4.0, // Standard prose (default)
+    blockquote: 4.0, // Quotes are prose-like
+    heading: 4.5, // Headings tend to be concise phrases
+    other: 4.0, // Default fallback
+  };
+
   /**
    * Chunk extraction result into semantic blocks
    */
@@ -302,7 +312,7 @@ class SemanticChunker {
     };
 
     for (const block of blocks) {
-      const blockTokens = this.estimateTokens(block.text);
+      const blockTokens = this.estimateTokens(block.text, block.type);
 
       // Check if we should start a new chunk due to:
       // 1. Token limit exceeded
@@ -328,7 +338,7 @@ class SemanticChunker {
         const splitBlocks = this.splitLargeBlock(block, maxTokens);
 
         for (const splitBlock of splitBlocks) {
-          const splitTokens = this.estimateTokens(splitBlock.text);
+          const splitTokens = this.estimateTokens(splitBlock.text, splitBlock.type);
 
           if (currentChunk.tokens + splitTokens > maxTokens && currentChunk.blocks.length > 0) {
             chunks.push(this.finalizeChunk(currentChunk));
@@ -461,7 +471,7 @@ class SemanticChunker {
     let currentTokens = 0;
 
     for (const sentence of sentences) {
-      const sentenceTokens = this.estimateTokens(sentence);
+      const sentenceTokens = this.estimateTokens(sentence, block.type);
 
       if (currentTokens + sentenceTokens > maxTokens && currentText) {
         // Finalize current split
@@ -629,11 +639,12 @@ class SemanticChunker {
     return stableChunkId(url, sectionPath, text);
   }
 
-  /**
-   * Estimate token count using ~4 chars/token heuristic
-   */
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.length / this.CHARS_PER_TOKEN);
+  private estimateTokens(
+    text: string,
+    blockType?: 'code' | 'table' | 'list' | 'paragraph' | 'blockquote' | 'heading' | 'other'
+  ): number {
+    const ratio = blockType ? this.CHARS_PER_TOKEN_RATIO[blockType] : this.CHARS_PER_TOKEN;
+    return Math.ceil(text.length / ratio);
   }
 
   /**
