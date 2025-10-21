@@ -27,6 +27,16 @@ class SemanticChunker {
   private readonly DEFAULT_OVERLAP_PERCENTAGE = 15;
   private readonly CHARS_PER_TOKEN = 4;
 
+  private readonly CHARS_PER_TOKEN_RATIO: Record<string, number> = {
+    code: 2.5, // Code is token-dense (symbols, short identifiers)
+    table: 3.0, // Tables have structure characters and delimiters
+    list: 3.5, // Lists have bullets/numbers and formatting
+    paragraph: 4.0, // Standard prose (default)
+    blockquote: 4.0, // Quotes are prose-like
+    heading: 4.5, // Headings tend to be concise phrases
+    other: 4.0, // Default fallback
+  };
+
   /**
    * Chunk extraction result into semantic blocks
    */
@@ -302,7 +312,7 @@ class SemanticChunker {
     };
 
     for (const block of blocks) {
-      const blockTokens = this.estimateTokens(block.text);
+      const blockTokens = this.estimateTokens(block.text, block.type);
 
       // Check if we should start a new chunk due to:
       // 1. Token limit exceeded
@@ -328,7 +338,7 @@ class SemanticChunker {
         const splitBlocks = this.splitLargeBlock(block, maxTokens);
 
         for (const splitBlock of splitBlocks) {
-          const splitTokens = this.estimateTokens(splitBlock.text);
+          const splitTokens = this.estimateTokens(splitBlock.text, splitBlock.type);
 
           if (currentChunk.tokens + splitTokens > maxTokens && currentChunk.blocks.length > 0) {
             chunks.push(this.finalizeChunk(currentChunk));
@@ -428,10 +438,18 @@ class SemanticChunker {
     sectionPath: string[];
     overlapTokens: number;
   } {
-    const text = chunkData.blocks
+    // Prepend section path as heading for embedding context
+    const contextPrefix =
+      chunkData.startingSectionPath.length > 0
+        ? `# ${chunkData.startingSectionPath.join(' > ')}\n\n`
+        : '';
+
+    const blockText = chunkData.blocks
       .map(b => b.text)
       .join('\n\n')
       .trim();
+
+    const text = contextPrefix + blockText;
 
     // Use the starting section path (where the chunk begins)
     const sectionPath = [...chunkData.startingSectionPath];
@@ -453,7 +471,7 @@ class SemanticChunker {
     let currentTokens = 0;
 
     for (const sentence of sentences) {
-      const sentenceTokens = this.estimateTokens(sentence);
+      const sentenceTokens = this.estimateTokens(sentence, block.type);
 
       if (currentTokens + sentenceTokens > maxTokens && currentText) {
         // Finalize current split
@@ -497,6 +515,13 @@ class SemanticChunker {
       const currentChunk = chunks[i];
       const previousChunk = chunks[i - 1];
 
+      // Only add overlap if sections are related (same top-level or parent-child)
+      if (!this.sectionsRelated(previousChunk.sectionPath, currentChunk.sectionPath)) {
+        // Different sections - no overlap
+        result.push(currentChunk);
+        continue;
+      }
+
       const currentTokens = this.estimateTokens(currentChunk.text);
       const overlapTokensTarget = Math.ceil(currentTokens * (overlapPercentage / 100));
 
@@ -517,6 +542,19 @@ class SemanticChunker {
     }
 
     return result;
+  }
+
+  /**
+   * Check if two section paths are related (same top-level section)
+   */
+  private sectionsRelated(path1: string[], path2: string[]): boolean {
+    // Both must have at least one section level
+    if (path1.length === 0 || path2.length === 0) {
+      return false;
+    }
+
+    // Same top-level section means related
+    return path1[0] === path2[0];
   }
 
   /**
@@ -601,11 +639,12 @@ class SemanticChunker {
     return stableChunkId(url, sectionPath, text);
   }
 
-  /**
-   * Estimate token count using ~4 chars/token heuristic
-   */
-  private estimateTokens(text: string): number {
-    return Math.ceil(text.length / this.CHARS_PER_TOKEN);
+  private estimateTokens(
+    text: string,
+    blockType?: 'code' | 'table' | 'list' | 'paragraph' | 'blockquote' | 'heading' | 'other'
+  ): number {
+    const ratio = blockType ? this.CHARS_PER_TOKEN_RATIO[blockType] : this.CHARS_PER_TOKEN;
+    return Math.ceil(text.length / ratio);
   }
 
   /**

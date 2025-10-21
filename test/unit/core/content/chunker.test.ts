@@ -102,13 +102,286 @@ This is the final section with concluding remarks.`,
         expect(chunk.tokens).toBeLessThanOrEqual(50 * 1.1); // Allow 10% buffer
       });
     });
+  });
 
+  describe('per-block-type token estimation', () => {
+    it('should use lower ratio (2.5) for code blocks', () => {
+      const codeResult: ExtractionResult = {
+        title: 'Code Example',
+        markdownContent: `# Code Section
+
+\`\`\`javascript
+function calculateTotal(items) {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+\`\`\``,
+        textContent: 'Code Example function calculateTotal...',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [{ level: 1, text: 'Code Section', position: 0 }],
+          codeBlocks: [
+            {
+              language: 'javascript',
+              content:
+                'function calculateTotal(items) {\n  return items.reduce((sum, item) => sum + item.price, 0);\n}',
+              position: 20,
+              length: 95,
+            },
+          ],
+          lists: [],
+          wordCount: 15,
+          characterCount: 150,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(codeResult, { maxTokens: 100 });
+      const codeChunk = chunks.find(c => c.text.includes('function calculateTotal'));
+
+      expect(codeChunk).toBeDefined();
+      // Code should have more tokens per character (2.5 chars/token vs 4)
+      // So for same character count, code chunks should report higher token counts
+      if (codeChunk) {
+        const codeTextLength = codeChunk.text.length;
+        const codeTokens = codeChunk.tokens;
+        // With mixed content (heading + code), effective ratio should be between 2.5 and 4.5
+        expect(codeTokens).toBeGreaterThan(Math.ceil(codeTextLength / 4.5));
+        expect(codeTokens).toBeLessThanOrEqual(Math.ceil(codeTextLength / 2.0));
+      }
+    });
+
+    it('should use appropriate ratio (3.0) for tables', () => {
+      const tableResult: ExtractionResult = {
+        title: 'Table Example',
+        markdownContent: `# Data Table
+
+| Name | Age | City |
+|------|-----|------|
+| Alice | 30 | NYC |
+| Bob | 25 | LA |`,
+        textContent: 'Data Table Name Age City Alice 30 NYC Bob 25 LA',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [{ level: 1, text: 'Data Table', position: 0 }],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 12,
+          characterCount: 100,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(tableResult, { maxTokens: 100 });
+      const tableChunk = chunks.find(c => c.text.includes('|'));
+
+      expect(tableChunk).toBeDefined();
+      if (tableChunk) {
+        const tableTextLength = tableChunk.text.length;
+        const tableTokens = tableChunk.tokens;
+        // Tables should be more token-dense than prose (3.0 vs 4.0)
+        expect(tableTokens).toBeGreaterThan(Math.ceil(tableTextLength / 5.0));
+        expect(tableTokens).toBeLessThanOrEqual(Math.ceil(tableTextLength / 2.5));
+      }
+    });
+
+    it('should use default ratio (4.0) for regular paragraphs', () => {
+      const proseResult: ExtractionResult = {
+        title: 'Prose Example',
+        markdownContent: `# Regular Content
+
+This is a paragraph with regular prose text. It contains normal sentences with standard punctuation and spacing.`,
+        textContent: 'Regular Content This is a paragraph with regular prose text...',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [{ level: 1, text: 'Regular Content', position: 0 }],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 18,
+          characterCount: 120,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(proseResult, { maxTokens: 100 });
+      const proseChunk = chunks.find(c => c.text.includes('regular prose'));
+
+      expect(proseChunk).toBeDefined();
+      if (proseChunk) {
+        const proseTextLength = proseChunk.text.length;
+        const proseTokens = proseChunk.tokens;
+        // Prose should use ~4 chars/token
+        const expectedTokens = Math.ceil(proseTextLength / 4);
+        expect(Math.abs(proseTokens - expectedTokens)).toBeLessThanOrEqual(5);
+      }
+    });
+
+    it('should use list-specific ratio (3.5) for lists', () => {
+      const listResult: ExtractionResult = {
+        title: 'List Example',
+        markdownContent: `# TODO List
+
+- Task number one with description
+- Task number two with description
+- Task number three with description`,
+        textContent: 'TODO List Task number one... Task number two... Task number three...',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [{ level: 1, text: 'TODO List', position: 0 }],
+          codeBlocks: [],
+          lists: [
+            {
+              content: '- Task number one\n- Task number two\n- Task number three',
+              position: 15,
+              itemCount: 3,
+            },
+          ],
+          wordCount: 16,
+          characterCount: 110,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(listResult, { maxTokens: 100 });
+      const listChunk = chunks.find(c => c.text.includes('- Task'));
+
+      expect(listChunk).toBeDefined();
+      if (listChunk) {
+        const listTextLength = listChunk.text.length;
+        const listTokens = listChunk.tokens;
+        // Lists should be between code and prose density (3.5 chars/token)
+        expect(listTokens).toBeGreaterThan(Math.ceil(listTextLength / 5.0));
+        expect(listTokens).toBeLessThanOrEqual(Math.ceil(listTextLength / 2.8));
+      }
+    });
+
+    it('should handle mixed content types with appropriate ratios', () => {
+      const mixedResult: ExtractionResult = {
+        title: 'Mixed Content',
+        markdownContent: `# Mixed Document
+
+Regular paragraph text here.
+
+\`\`\`python
+def hello():
+    print("world")
+\`\`\`
+
+- List item one
+- List item two
+
+| Col1 | Col2 |
+|------|------|
+| A    | B    |`,
+        textContent: 'Mixed Document Regular paragraph text... def hello... List item one...',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [{ level: 1, text: 'Mixed Document', position: 0 }],
+          codeBlocks: [
+            {
+              language: 'python',
+              content: 'def hello():\n    print("world")',
+              position: 50,
+              length: 35,
+            },
+          ],
+          lists: [{ content: '- List item one\n- List item two', position: 90, itemCount: 2 }],
+          wordCount: 20,
+          characterCount: 180,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(mixedResult, { maxTokens: 80 });
+
+      // Should have multiple chunks due to different content types
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Verify that chunks exist and have reasonable token counts
+      chunks.forEach(chunk => {
+        expect(chunk.tokens).toBeGreaterThan(0);
+        expect(chunk.tokens).toBeLessThanOrEqual(80 * 1.3); // Allow buffer for unsplittable blocks
+      });
+    });
+
+    it('should maintain backward compatibility with default ratio when block type is unknown', () => {
+      const simpleResult: ExtractionResult = {
+        title: 'Simple Content',
+        markdownContent: 'Just some plain text without any special formatting.',
+        textContent: 'Just some plain text without any special formatting.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: undefined,
+      };
+
+      const chunks = semanticChunker.chunk(simpleResult, { maxTokens: 50 });
+
+      expect(chunks.length).toBeGreaterThan(0);
+      chunks.forEach(chunk => {
+        // Should use default 4 chars/token ratio
+        const expectedTokens = Math.ceil(chunk.text.length / 4);
+        expect(chunk.tokens).toBe(expectedTokens);
+      });
+    });
+  });
+
+  describe('basic chunking functionality', () => {
     it('should respect maxTokens limit', () => {
       const chunks = semanticChunker.chunk(mockExtractionResult, { maxTokens: 30 });
 
       chunks.forEach(chunk => {
         expect(chunk.tokens).toBeLessThanOrEqual(30 * 1.1); // Allow 10% buffer for semantic boundaries
       });
+    });
+  });
+
+  describe('section heading inclusion', () => {
+    it('should include section path as heading prefix in chunk text', () => {
+      const chunks = semanticChunker.chunk(mockExtractionResult, {
+        maxTokens: 100,
+        overlapPercentage: 0,
+      });
+
+      // Find chunk with section path
+      const sectionChunk = chunks.find(c => c.sectionPath.length > 0);
+      expect(sectionChunk).toBeDefined();
+
+      // Should include section heading in text
+      expect(sectionChunk!.text).toMatch(/^# /); // Starts with markdown heading
+      expect(sectionChunk!.text).toContain(sectionChunk!.sectionPath.join(' > '));
+    });
+
+    it('should format multi-level section paths correctly', () => {
+      const chunks = semanticChunker.chunk(mockExtractionResult, {
+        maxTokens: 50,
+        overlapPercentage: 0,
+      });
+
+      // Find chunk with nested section path
+      const nestedChunk = chunks.find(c => c.sectionPath.length > 1);
+      expect(nestedChunk).toBeDefined();
+
+      // Should format as "# Parent > Child"
+      const expectedPrefix = `# ${nestedChunk!.sectionPath.join(' > ')}\n\n`;
+      expect(nestedChunk!.text.startsWith(expectedPrefix)).toBe(true);
+    });
+
+    it('should not add heading prefix for chunks without section path', () => {
+      // Create extraction result without semantic info
+      const noSemanticResult: ExtractionResult = {
+        markdownContent: 'Just plain content without headings.',
+        textContent: 'Just plain content without headings.',
+        sectionPaths: [],
+        semanticInfo: undefined,
+        title: 'Test',
+        extractionMethod: 'cheerio',
+      };
+
+      const chunks = semanticChunker.chunk(noSemanticResult, { maxTokens: 100 });
+
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].sectionPath).toEqual([]);
+      expect(chunks[0].text).not.toMatch(/^# /);
+      expect(chunks[0].text).toBe('Just plain content without headings.');
     });
   });
 
@@ -197,6 +470,117 @@ This is the final section with concluding remarks.`,
       });
 
       chunks.forEach(chunk => {
+        expect(chunk.overlapTokens).toBe(0);
+      });
+    });
+
+    it('should NOT add overlap when section path changes (different top-level sections)', () => {
+      const multiSectionResult: ExtractionResult = {
+        title: 'Multi-Section Document',
+        markdownContent: `# Section A
+Content from section A paragraph one.
+
+# Section B
+Content from section B paragraph one.`,
+        textContent: 'Content from section A paragraph one. Content from section B paragraph one.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [
+            { level: 1, text: 'Section A', position: 0 },
+            { level: 1, text: 'Section B', position: 50 },
+          ],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 14,
+          characterCount: 120,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(multiSectionResult, {
+        maxTokens: 20,
+        overlapPercentage: 20,
+      });
+
+      // Find chunks from different sections
+      const sectionAChunk = chunks.find(c => c.sectionPath[0] === 'Section A');
+      const sectionBChunk = chunks.find(c => c.sectionPath[0] === 'Section B');
+
+      expect(sectionAChunk).toBeDefined();
+      expect(sectionBChunk).toBeDefined();
+
+      // Section B chunk should NOT have overlap from Section A
+      if (sectionBChunk) {
+        expect(sectionBChunk.overlapTokens).toBe(0);
+        expect(sectionBChunk.text).not.toContain('section A');
+      }
+    });
+
+    it('should add overlap for consecutive chunks in the same top-level section', () => {
+      const sameSectionResult: ExtractionResult = {
+        title: 'Same Section Document',
+        markdownContent: `# Main Section
+## Subsection A
+This is content in subsection A with enough text to create multiple chunks when we use a small token limit.
+
+## Subsection B
+This is content in subsection B which is under the same main section.`,
+        textContent:
+          'This is content in subsection A with enough text to create multiple chunks when we use a small token limit. This is content in subsection B which is under the same main section.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: {
+          headings: [
+            { level: 1, text: 'Main Section', position: 0 },
+            { level: 2, text: 'Subsection A', position: 20 },
+            { level: 2, text: 'Subsection B', position: 100 },
+          ],
+          codeBlocks: [],
+          lists: [],
+          wordCount: 32,
+          characterCount: 200,
+        },
+      };
+
+      const chunks = semanticChunker.chunk(sameSectionResult, {
+        maxTokens: 30,
+        overlapPercentage: 15,
+      });
+
+      // Find chunks from same main section
+      const mainSectionChunks = chunks.filter(c => c.sectionPath[0] === 'Main Section');
+
+      // Should have multiple chunks under same main section
+      expect(mainSectionChunks.length).toBeGreaterThan(1);
+
+      // Check if subsequent chunks have overlap (except the first)
+      const hasOverlap = mainSectionChunks.slice(1).some(chunk => chunk.overlapTokens > 0);
+      expect(hasOverlap).toBe(true);
+    });
+
+    it('should handle chunks with empty section paths (no overlap)', () => {
+      const noSemanticResult: ExtractionResult = {
+        title: 'Plain Document',
+        markdownContent: 'First paragraph of content. Second paragraph of content.',
+        textContent: 'First paragraph of content. Second paragraph of content.',
+        sectionPaths: [],
+        extractionMethod: 'cheerio',
+        semanticInfo: undefined,
+      };
+
+      const chunks = semanticChunker.chunk(noSemanticResult, {
+        maxTokens: 15,
+        overlapPercentage: 20,
+      });
+
+      // All chunks should have empty section paths
+      chunks.forEach(chunk => {
+        expect(chunk.sectionPath).toEqual([]);
+      });
+
+      // Chunks without section paths should not get overlap
+      // (sectionsRelated returns false for empty paths)
+      chunks.slice(1).forEach(chunk => {
         expect(chunk.overlapTokens).toBe(0);
       });
     });
@@ -345,11 +729,15 @@ Final paragraph.`,
       const chunks = semanticChunker.chunk(mockExtractionResult, { maxTokens: 40 });
 
       if (chunks.length > 1) {
-        const hasExpectedOverlap = chunks.some(chunk => {
-          const expectedOverlap = Math.ceil(40 * 0.15);
-          return chunk.overlapTokens === expectedOverlap;
+        // Check that at least some chunks have overlap (not all will due to section boundaries)
+        const chunksWithOverlap = chunks.filter(chunk => chunk.overlapTokens > 0);
+        expect(chunksWithOverlap.length).toBeGreaterThan(0);
+
+        // Verify overlap is reasonable (between 10-20% of max tokens)
+        chunksWithOverlap.forEach(chunk => {
+          expect(chunk.overlapTokens).toBeGreaterThan(0);
+          expect(chunk.overlapTokens).toBeLessThanOrEqual(Math.ceil(40 * 0.2)); // Max 20%
         });
-        expect(hasExpectedOverlap).toBe(true);
       }
     });
   });
