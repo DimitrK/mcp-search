@@ -5,6 +5,7 @@ export { upsertDocument, getDocument, deleteDocument, type DocumentRow } from '.
 export {
   upsertChunks,
   similaritySearch,
+  getAllChunksByUrl,
   deleteChunkById,
   deleteChunksByUrl,
   type ChunkRow,
