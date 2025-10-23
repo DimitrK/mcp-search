@@ -102,9 +102,7 @@ const onMessage = async msg => {
   try {
     if (type === 'close') {
       try {
-        if (conn) {
-          conn.closeSync();
-        }
+        conn.closeSync();
       } catch {
         // ignore close errors
       }

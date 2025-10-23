@@ -469,18 +469,14 @@ function mergeOverlappingChunks(chunks: ConsolidatableChunk[]): ConsolidatedChun
       const overlap = overlapInfo.overlapText;
 
       // Try different merge strategies
-      let merged = false;
-
       // Strategy 1: Complete prefix/suffix match (one text completely contained in another)
       if (mergedText === overlap) {
         // mergedText is completely contained in chunk.text
         mergedText = chunk.text;
         sourceIds.push(chunk.id);
-        merged = true;
       } else if (chunk.text === overlap) {
         // chunk.text is completely contained in mergedText, keep mergedText as-is
         sourceIds.push(chunk.id);
-        merged = true;
       }
 
       // Strategy 2: mergedText ends with overlap, chunk starts with overlap
@@ -489,7 +485,6 @@ function mergeOverlappingChunks(chunks: ConsolidatableChunk[]): ConsolidatedChun
         if (remainingPart.trim()) {
           mergedText += ' ' + remainingPart.trim();
           sourceIds.push(chunk.id);
-          merged = true;
         }
       }
 
@@ -499,12 +494,11 @@ function mergeOverlappingChunks(chunks: ConsolidatableChunk[]): ConsolidatedChun
         if (leadingPart.trim()) {
           mergedText = leadingPart.trim() + ' ' + mergedText;
           sourceIds.push(chunk.id);
-          merged = true;
         }
       }
 
       // Strategy 4: For word-level overlaps, use intelligent combination
-      else if (!merged) {
+      else {
         mergedText = combineTwoTexts(mergedText, chunk.text);
         sourceIds.push(chunk.id);
       }

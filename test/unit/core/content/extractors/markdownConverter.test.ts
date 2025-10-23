@@ -1,7 +1,4 @@
-import {
-  MarkdownConverter,
-  SemanticInfo,
-} from '../../../../../src/core/content/extractors/markdownConverter';
+import { MarkdownConverter } from '../../../../../src/core/content/extractors/markdownConverter';
 
 describe('MarkdownConverter', () => {
   let converter: MarkdownConverter;
