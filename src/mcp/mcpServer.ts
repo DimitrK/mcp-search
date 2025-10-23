@@ -46,7 +46,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'web.readFromPage',
         description: MCP_TOOL_DESCRIPTIONS.READ_FROM_PAGE,
-        inputSchema: zodToJsonSchema(ReadFromPageInput),
+        inputSchema: zodToJsonSchema(ReadFromPageInput, { $refStrategy: 'none' }),
       },
     ],
   };

@@ -55,6 +55,20 @@ jest.mock('../../../src/core/vector/store/documents', () => ({
 
 jest.mock('../../../src/core/vector/store/chunks', () => ({
   similaritySearch: jest.fn().mockResolvedValue([]),
+  getAllChunksByUrl: jest.fn().mockResolvedValue([
+    {
+      id: 'chunk-1',
+      text: 'First chunk of content',
+      section_path: 'Introduction',
+      created_at: '2024-01-01T00:00:00Z',
+    },
+    {
+      id: 'chunk-2',
+      text: 'Second chunk of content',
+      section_path: 'Body',
+      created_at: '2024-01-01T00:01:00Z',
+    },
+  ]),
 }));
 
 jest.mock('../../../src/core/vector/embeddingIntegrationService', () => ({
@@ -127,14 +141,167 @@ describe('Read From Page Handler', () => {
 
     await expect(handleReadFromPage(missingUrl, mockLogger)).rejects.toThrow(); // Should fail validation
 
+    // Query is now optional - missing query should succeed and return all chunks
     const missingQuery = {
       url: 'https://example.com',
     };
 
-    await expect(handleReadFromPage(missingQuery, mockLogger)).rejects.toThrow(); // Should fail validation
+    const result = await handleReadFromPage(missingQuery, mockLogger);
+    expect(result).toHaveProperty('content');
+
+    // Parse response to verify it returns all chunks mode
+    const parsedResponse = JSON.parse(result.content[0].text);
+    expect(parsedResponse.queries).toHaveLength(1);
+    expect(parsedResponse.queries[0].query).toBe(''); // Empty query string indicates full content retrieval
+    expect(parsedResponse.queries[0].results).toHaveLength(2); // Should return all chunks from mock
+    // Verify chunks don't have score field (since no similarity search)
+    parsedResponse.queries[0].results.forEach((chunk: { score?: number }) => {
+      expect(chunk.score).toBeUndefined();
+    });
   });
 
   test('should handle undefined input', async () => {
     await expect(handleReadFromPage(undefined, mockLogger)).rejects.toThrow(); // Should fail validation
+  });
+
+  test('should handle empty string query', async () => {
+    const emptyStringQuery = {
+      url: 'https://example.com',
+      query: '',
+    };
+
+    const result = await handleReadFromPage(emptyStringQuery, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Empty string should trigger "return all chunks" mode
+    expect(parsedResponse.queries).toHaveLength(1);
+    expect(parsedResponse.queries[0].query).toBe('');
+    expect(parsedResponse.queries[0].results).toHaveLength(2); // All chunks from mock
+    // Verify no score field
+    parsedResponse.queries[0].results.forEach((chunk: { score?: number }) => {
+      expect(chunk.score).toBeUndefined();
+    });
+  });
+
+  test('should handle whitespace-only query', async () => {
+    const whitespaceQuery = {
+      url: 'https://example.com',
+      query: '   ',
+    };
+
+    const result = await handleReadFromPage(whitespaceQuery, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Whitespace-only should trigger "return all chunks" mode
+    expect(parsedResponse.queries).toHaveLength(1);
+    expect(parsedResponse.queries[0].query).toBe('');
+    expect(parsedResponse.queries[0].results).toHaveLength(2); // All chunks from mock
+  });
+
+  test('should handle empty array query', async () => {
+    const emptyArrayQuery = {
+      url: 'https://example.com',
+      query: [],
+    };
+
+    const result = await handleReadFromPage(emptyArrayQuery, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Empty array should trigger "return all chunks" mode
+    expect(parsedResponse.queries).toHaveLength(1);
+    expect(parsedResponse.queries[0].query).toBe('');
+    expect(parsedResponse.queries[0].results).toHaveLength(2); // All chunks from mock
+  });
+
+  test('should handle array with empty strings', async () => {
+    const emptyStringsArray = {
+      url: 'https://example.com',
+      query: ['', '  ', ''],
+    };
+
+    const result = await handleReadFromPage(emptyStringsArray, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Array with only empty/whitespace strings should trigger "return all chunks" mode
+    expect(parsedResponse.queries).toHaveLength(1);
+    expect(parsedResponse.queries[0].query).toBe('');
+    expect(parsedResponse.queries[0].results).toHaveLength(2); // All chunks from mock
+  });
+
+  test('should handle array with mixed empty and valid queries', async () => {
+    const mixedArray = {
+      url: 'https://example.com',
+      query: ['valid query', '', '  '],
+    };
+
+    const result = await handleReadFromPage(mixedArray, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Should only process valid queries, filtering out empty ones
+    expect(parsedResponse.queries.length).toBeGreaterThan(0);
+    // All returned queries should be non-empty
+    parsedResponse.queries.forEach((q: { query: string }) => {
+      expect(q.query.trim()).not.toBe('');
+    });
+  });
+
+  test('should handle multiple valid queries', async () => {
+    const multipleQueries = {
+      url: 'https://example.com',
+      query: ['query one', 'query two', 'query three'],
+    };
+
+    const result = await handleReadFromPage(multipleQueries, mockLogger);
+    const parsedResponse = JSON.parse(result.content[0].text);
+
+    // Should return results for all queries
+    expect(parsedResponse.queries).toHaveLength(3);
+    expect(parsedResponse.queries[0].query).toBe('query one');
+    expect(parsedResponse.queries[1].query).toBe('query two');
+    expect(parsedResponse.queries[2].query).toBe('query three');
+  });
+
+  test('should handle forceRefresh parameter', async () => {
+    const forceRefreshInput = {
+      url: 'https://example.com',
+      query: 'test',
+      forceRefresh: true,
+    };
+
+    const result = await handleReadFromPage(forceRefreshInput, mockLogger);
+    expect(result).toHaveProperty('content');
+
+    const parsedResponse = JSON.parse(result.content[0].text);
+    expect(parsedResponse).toHaveProperty('url', forceRefreshInput.url);
+  });
+
+  test('should handle maxResults parameter', async () => {
+    const maxResultsInput = {
+      url: 'https://example.com',
+      query: 'test',
+      maxResults: 3,
+    };
+
+    const result = await handleReadFromPage(maxResultsInput, mockLogger);
+    expect(result).toHaveProperty('content');
+
+    const parsedResponse = JSON.parse(result.content[0].text);
+    expect(parsedResponse.queries).toHaveLength(1);
+    // Results should respect maxResults (though actual enforcement is in backend)
+  });
+
+  test('should handle includeMetadata parameter', async () => {
+    const includeMetadataInput = {
+      url: 'https://example.com',
+      query: 'test',
+      includeMetadata: true,
+    };
+
+    const result = await handleReadFromPage(includeMetadataInput, mockLogger);
+    expect(result).toHaveProperty('content');
+
+    const parsedResponse = JSON.parse(result.content[0].text);
+    expect(parsedResponse).toHaveProperty('url');
+    expect(parsedResponse).toHaveProperty('lastCrawled');
   });
 });

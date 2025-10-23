@@ -6,6 +6,7 @@ import {
   deleteDocument,
   upsertChunks,
   similaritySearch,
+  getAllChunksByUrl,
   deleteChunkById,
   deleteChunksByUrl,
 } from '../../../../../src/core/vector/store/duckdbVectorStore';
@@ -99,6 +100,22 @@ describe('duckdbVectorStore CRUD', () => {
 
   test('similaritySearch executes select with VSS operator', async () => {
     const results = await similaritySearch('https://ex', new Array(1536).fill(0), 5);
+    expect(Array.isArray(results)).toBe(true);
+  });
+
+  test('getAllChunksByUrl executes select ordered by created_at', async () => {
+    const results = await getAllChunksByUrl('https://ex');
+    expect(Array.isArray(results)).toBe(true);
+    // Results should not have score field
+    if (results.length > 0) {
+      expect(results[0]).not.toHaveProperty('score');
+      expect(results[0]).toHaveProperty('id');
+      expect(results[0]).toHaveProperty('text');
+    }
+  });
+
+  test('getAllChunksByUrl accepts correlation ID in options', async () => {
+    const results = await getAllChunksByUrl('https://ex', { correlationId: 'test-123' });
     expect(Array.isArray(results)).toBe(true);
   });
 });

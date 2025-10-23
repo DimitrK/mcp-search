@@ -35,8 +35,9 @@ export const RelevantChunk = z.object({
   text: z.string().describe('The actual text content of the chunk'),
   score: z
     .number()
+    .optional()
     .describe(
-      'Similarity score between 0-1 indicating relevance to the search query (1.0 = perfect match)'
+      'Similarity score between 0-1 indicating relevance to the search query (1.0 = perfect match). Omitted when no query is provided (returning all chunks).'
     ),
   sectionPath: z
     .array(z.string())
@@ -148,8 +149,9 @@ export const ReadFromPageInput = z.object({
   url: z.string().url().describe('The URL of the web page to extract and search content from'),
   query: z
     .union([z.string(), z.array(z.string())])
+    .optional()
     .describe(
-      'Search query or array of queries to find relevant content. Use specific, domain-relevant terms for best results (e.g., "ZK rollup advantages" instead of just "advantages"). Single query works for precise searches. Multiple queries as array dramatically improves results by combining semantic variations with specificity - use 2-4 related terms that include domain context (e.g., ["starknet pros and cons", "STRK benefits and risks", "ZK rollup advantages and disadvantages", "L2 blockchain challenges and solutions"]). This increases recall while maintaining precision through semantic similarity matching'
+      'Optional query/queries for semantic search. With query: returns relevant chunks by similarity score (use specific terms, e.g. "ZK rollup advantages"; array of 2-4 variations improves results). Without query: returns ALL chunks in document order.'
     ),
   forceRefresh: z
     .boolean()

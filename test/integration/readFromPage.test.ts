@@ -546,4 +546,246 @@ describe('readFromPage Integration', () => {
       }
     });
   });
+
+  describe('Retrieve All Chunks Without Query', () => {
+    it('should return all chunks when query is undefined', async () => {
+      // Mock HTTP response for content fetching with proper HTML structure
+      const mockHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Complete Content Test</title>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>Test Article</h1>
+      <h2>Section 1</h2>
+      <p>First section content with important information about artificial intelligence and machine learning technologies.</p>
+      <h2>Section 2</h2>
+      <p>Second section content with different data about neural networks and deep learning frameworks.</p>
+      <h2>Section 3</h2>
+      <p>Third section content for comprehensive testing of blockchain and distributed systems.</p>
+    </article>
+  </main>
+</body>
+</html>`;
+
+      mockClientRequest.mockResolvedValueOnce({
+        statusCode: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'content-length': mockHtml.length.toString(),
+        },
+        body: {
+          text: jest.fn().mockResolvedValue(mockHtml),
+          json: jest.fn().mockResolvedValue({}),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      // Mock embedding responses for chunk storage (3 chunks expected)
+      mockUndiciRequest.mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: {
+          json: jest.fn().mockResolvedValue({
+            data: [
+              { embedding: Array(1024).fill(0.5) },
+              { embedding: Array(1024).fill(0.6) },
+              { embedding: Array(1024).fill(0.7) },
+            ],
+          }),
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      // Call without query parameter (undefined)
+      const input = {
+        url: testUrl,
+        // query intentionally omitted
+      };
+
+      const result = await handleReadFromPage(input, logger);
+      const parsedResult = parseReadFromPageResult(result);
+
+      // Should return a single query result with empty query string
+      expect(parsedResult.queries).toHaveLength(1);
+      expect(parsedResult.queries[0].query).toBe('');
+
+      // Should return chunks (may be empty if extraction failed, but structure correct)
+      const allChunks = parsedResult.queries[0].results;
+      expect(Array.isArray(allChunks)).toBe(true);
+
+      // Chunks should NOT have score field
+      allChunks.forEach(chunk => {
+        expect(chunk).toHaveProperty('id');
+        expect(chunk).toHaveProperty('text');
+        expect(chunk.score).toBeUndefined();
+        // sectionPath is optional but should exist for structured content
+      });
+    });
+
+    it('should return all chunks when query is empty string', async () => {
+      // Mock HTTP response with better content
+      const mockHtml = `<!DOCTYPE html>
+<html>
+<head><title>Empty String Test</title></head>
+<body>
+  <main>
+    <article>
+      <p>Test content for empty string query handling with substantial text to ensure proper extraction.</p>
+    </article>
+  </main>
+</body>
+</html>`;
+
+      mockClientRequest.mockResolvedValueOnce({
+        statusCode: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+        body: {
+          text: jest.fn().mockResolvedValue(mockHtml),
+          json: jest.fn().mockResolvedValue({}),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      mockUndiciRequest.mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: {
+          json: jest.fn().mockResolvedValue({
+            data: [{ embedding: Array(1024).fill(0.5) }],
+          }),
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      const input = {
+        url: testUrl,
+        query: '', // Empty string
+      };
+
+      const result = await handleReadFromPage(input, logger);
+      const parsedResult = parseReadFromPageResult(result);
+
+      expect(parsedResult.queries).toHaveLength(1);
+      expect(parsedResult.queries[0].query).toBe('');
+      
+      const allChunks = parsedResult.queries[0].results;
+      expect(Array.isArray(allChunks)).toBe(true);
+
+      // Verify no score field
+      allChunks.forEach(chunk => {
+        expect(chunk.score).toBeUndefined();
+      });
+    });
+
+    it('should return all chunks when query is empty array', async () => {
+      // Mock HTTP response
+      const mockHtml = `<!DOCTYPE html>
+<html>
+<head><title>Empty Array Test</title></head>
+<body>
+  <main>
+    <article>
+      <p>Array test content with enough text for proper extraction and chunking validation.</p>
+    </article>
+  </main>
+</body>
+</html>`;
+
+      mockClientRequest.mockResolvedValueOnce({
+        statusCode: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+        body: {
+          text: jest.fn().mockResolvedValue(mockHtml),
+          json: jest.fn().mockResolvedValue({}),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      mockUndiciRequest.mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: {
+          json: jest.fn().mockResolvedValue({
+            data: [{ embedding: Array(1024).fill(0.5) }],
+          }),
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      const input = {
+        url: testUrl,
+        query: [], // Empty array
+      };
+
+      const result = await handleReadFromPage(input, logger);
+      const parsedResult = parseReadFromPageResult(result);
+
+      expect(parsedResult.queries).toHaveLength(1);
+      expect(parsedResult.queries[0].query).toBe('');
+      
+      const allChunks = parsedResult.queries[0].results;
+      expect(Array.isArray(allChunks)).toBe(true);
+
+      // Verify no score field
+      allChunks.forEach(chunk => {
+        expect(chunk.score).toBeUndefined();
+      });
+    });
+
+    it('should return all chunks when query array contains only empty strings', async () => {
+      const mockHtml = `<!DOCTYPE html>
+<html>
+<head><title>Whitespace Test</title></head>
+<body>
+  <main>
+    <article>
+      <p>Whitespace test content with substantial text for validation purposes.</p>
+    </article>
+  </main>
+</body>
+</html>`;
+
+      mockClientRequest.mockResolvedValueOnce({
+        statusCode: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+        body: {
+          text: jest.fn().mockResolvedValue(mockHtml),
+          json: jest.fn().mockResolvedValue({}),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      mockUndiciRequest.mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: {
+          json: jest.fn().mockResolvedValue({
+            data: [{ embedding: Array(1024).fill(0.5) }],
+          }),
+          text: jest.fn().mockResolvedValue('{}'),
+          arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+        } as any,
+      });
+
+      const input = {
+        url: testUrl,
+        query: ['', '  ', '\t'], // Array of whitespace strings
+      };
+
+      const result = await handleReadFromPage(input, logger);
+      const parsedResult = parseReadFromPageResult(result);
+
+      expect(parsedResult.queries).toHaveLength(1);
+      expect(parsedResult.queries[0].query).toBe('');
+      
+      const allChunks = parsedResult.queries[0].results;
+      expect(Array.isArray(allChunks)).toBe(true);
+    });
+  });
 });

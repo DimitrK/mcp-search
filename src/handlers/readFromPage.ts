@@ -4,7 +4,7 @@ import { FetchOptions, FetchResult, fetchUrl } from '../core/content/httpContent
 import { extractContent } from '../core/content/htmlContentExtractor';
 import { semanticChunker } from '../core/content/chunker';
 import { upsertDocument, getDocument, DocumentRow } from '../core/vector/store/documents';
-import { similaritySearch } from '../core/vector/store/chunks';
+import { similaritySearch, getAllChunksByUrl } from '../core/vector/store/chunks';
 import { normalizeUrl } from '../utils/urlValidator';
 import { generateCorrelationId, withTiming } from '../utils/logger';
 import { getEnvironment } from '../config/environment';
@@ -13,6 +13,19 @@ import { sha256Hex } from '../utils/contentHash';
 import { SimilaritySearchManager } from '../core/similarity/similaritySearchManager';
 import { RelevantChunkMapper } from '../core/similarity/mappers/relevantChunkMapper';
 import type { HandlerContext } from '../mcp/mcpServer';
+
+/**
+ * Determines if a query parameter is effectively empty
+ * Handles: undefined, null, empty string, empty array, arrays with empty/null elements
+ */
+function isQueryEmpty(query: string | string[] | undefined): boolean {
+  if (query === undefined || query === null) return true;
+  if (typeof query === 'string') return query.trim() === '';
+  if (Array.isArray(query)) {
+    return query.length === 0 || query.every(q => !q || (typeof q === 'string' && q.trim() === ''));
+  }
+  return false;
+}
 
 // Use singleton instance from import
 
@@ -207,130 +220,173 @@ export async function handleReadFromPage(
     }
 
     // Phase 4: Query Processing & Similarity Search
-    await context?.sendProgress(70, 100, 'Processing similarity search...');
-    const queries = Array.isArray(input.query) ? input.query : [input.query];
+    const hasQuery = !isQueryEmpty(input.query);
 
     let queryResults: { query: string; results: RelevantChunkType[] }[];
-    try {
-      queryResults = await withTiming(childLogger, 'query.process', async () => {
-        const results: { query: string; results: RelevantChunkType[] }[] = [];
 
-        if (searchManager && !note) {
-          // Use manager for parallel query processing
-          const similarityResults = await searchManager.searchMultiple(
-            queries,
-            normalizedUrl,
-            input.maxResults,
-            { correlationId }
+    if (!hasQuery) {
+      // No query provided - return all chunks in document order without similarity scoring
+      await context?.sendProgress(70, 100, 'Retrieving all page content...');
+      childLogger.debug({}, 'No query provided - returning all chunks in document order');
+
+      queryResults = await withTiming(childLogger, 'query.getAllChunks', async () => {
+        try {
+          const allChunks = await getAllChunksByUrl(normalizedUrl, { correlationId });
+
+          childLogger.info(
+            { totalChunks: allChunks.length },
+            'Retrieved all chunks without query filter'
           );
 
-          // Map results to expected format
-          for (const query of queries) {
-            const chunks = similarityResults.get(query) || [];
-            results.push({
-              query,
-              results: RelevantChunkMapper.mapChunksToRelevant(chunks),
-            });
-          }
-        } else {
-          // Fallback: Return raw chunks without semantic scoring
-          childLogger.debug({}, 'Using fallback content retrieval without embeddings');
+          return [
+            {
+              query: '', // Empty query string to indicate full content retrieval
+              results: allChunks.map(chunk => ({
+                id: chunk.id,
+                text: chunk.text,
+                // score field omitted when no similarity search performed
+                sectionPath: chunk.section_path ? chunk.section_path.split('|') : undefined,
+              })),
+            },
+          ];
+        } catch (error) {
+          childLogger.warn({ error }, 'Failed to retrieve all chunks - returning empty results');
+          return [
+            {
+              query: '',
+              results: [],
+            },
+          ];
+        }
+      });
+    } else {
+      // Query provided - perform similarity search
+      await context?.sendProgress(70, 100, 'Processing similarity search...');
+      const rawQueries = Array.isArray(input.query) ? input.query : [input.query!];
+      // Filter out any null/undefined/empty queries that might have slipped through
+      const queries = rawQueries.filter(q => q && typeof q === 'string' && q.trim() !== '');
 
-          for (const query of queries) {
-            // Simple text matching fallback - get chunks that contain query terms
-            const queryTerms = query.toLowerCase().split(/\s+/);
+      try {
+        queryResults = await withTiming(childLogger, 'query.process', async () => {
+          const results: { query: string; results: RelevantChunkType[] }[] = [];
 
-            try {
-              // Try to get any existing chunks for basic content return
-              const rawResults = await similaritySearch(
-                normalizedUrl,
-                Array(1024).fill(0), // Dummy embedding
-                input.maxResults,
-                1024 // dummy dimension
-              );
+          if (searchManager && !note) {
+            // Use manager for parallel query processing
+            const similarityResults = await searchManager.searchMultiple(
+              queries,
+              normalizedUrl,
+              input.maxResults,
+              { correlationId }
+            );
 
-              const matchingChunks = rawResults
-                .filter(chunk => {
-                  const chunkText = chunk.text.toLowerCase();
-                  return queryTerms.some(term => chunkText.includes(term));
-                })
-                .slice(0, input.maxResults)
-                .map(chunk => ({
-                  id: chunk.id,
-                  text: chunk.text,
-                  score: 0.5, // Default score for fallback
-                  sectionPath: chunk.section_path ? chunk.section_path.split('|') : undefined,
-                }));
-
+            // Map results to expected format
+            for (const query of queries) {
+              const chunks = similarityResults.get(query) || [];
               results.push({
                 query,
-                results: matchingChunks,
-              });
-            } catch (searchError) {
-              childLogger.warn({ error: searchError }, 'Fallback search also failed');
-              // Return empty results for this query
-              results.push({
-                query,
-                results: [],
+                results: RelevantChunkMapper.mapChunksToRelevant(chunks),
               });
             }
-          }
-        }
+          } else {
+            // Fallback: Return raw chunks without semantic scoring
+            childLogger.debug({}, 'Using fallback content retrieval without embeddings');
 
-        return results;
-      });
-    } catch (queryError) {
-      // If query processing fails due to embedding issues, set note and use fallback
-      if (!note && (queryError as Error).message.includes('Embedding')) {
-        childLogger.warn(
-          { error: queryError },
-          'Embedding service failed during query processing - using fallback'
-        );
-        note = 'Embedding service unavailable; returning content without semantic search';
-      } else if (!note) {
-        // Check if it's an embedding-related error by checking the error type or nested error
-        const error = queryError as Error & {
-          type?: string;
-          originalError?: { name?: string };
-        };
-        if (
-          error?.type === 'embedding' ||
-          error?.originalError?.name === 'EmbeddingError' ||
-          error?.message?.includes('embedding')
-        ) {
+            for (const query of queries) {
+              // Simple text matching fallback - get chunks that contain query terms
+              const queryTerms = query.toLowerCase().split(/\s+/);
+
+              try {
+                // Try to get any existing chunks for basic content return
+                const rawResults = await similaritySearch(
+                  normalizedUrl,
+                  Array(1024).fill(0), // Dummy embedding
+                  input.maxResults,
+                  1024 // dummy dimension
+                );
+
+                const matchingChunks = rawResults
+                  .filter(chunk => {
+                    const chunkText = chunk.text.toLowerCase();
+                    return queryTerms.some(term => chunkText.includes(term));
+                  })
+                  .slice(0, input.maxResults)
+                  .map(chunk => ({
+                    id: chunk.id,
+                    text: chunk.text,
+                    score: 0.5, // Default score for fallback
+                    sectionPath: chunk.section_path ? chunk.section_path.split('|') : undefined,
+                  }));
+
+                results.push({
+                  query,
+                  results: matchingChunks,
+                });
+              } catch (searchError) {
+                childLogger.warn({ error: searchError }, 'Fallback search also failed');
+                // Return empty results for this query
+                results.push({
+                  query,
+                  results: [],
+                });
+              }
+            }
+          }
+
+          return results;
+        });
+      } catch (queryError) {
+        // If query processing fails due to embedding issues, set note and use fallback
+        if (!note && (queryError as Error).message.includes('Embedding')) {
           childLogger.warn(
             { error: queryError },
             'Embedding service failed during query processing - using fallback'
           );
           note = 'Embedding service unavailable; returning content without semantic search';
+        } else if (!note) {
+          // Check if it's an embedding-related error by checking the error type or nested error
+          const error = queryError as Error & {
+            type?: string;
+            originalError?: { name?: string };
+          };
+          if (
+            error?.type === 'embedding' ||
+            error?.originalError?.name === 'EmbeddingError' ||
+            error?.message?.includes('embedding')
+          ) {
+            childLogger.warn(
+              { error: queryError },
+              'Embedding service failed during query processing - using fallback'
+            );
+            note = 'Embedding service unavailable; returning content without semantic search';
+          }
         }
-      }
 
-      // Use fallback query processing
-      queryResults = [];
-      for (const query of queries) {
-        try {
-          const rawResults = await similaritySearch(
-            normalizedUrl,
-            Array(1024).fill(0), // Dummy embedding
-            input.maxResults,
-            1024 // dummy dimension
-          );
+        // Use fallback query processing
+        queryResults = [];
+        for (const query of queries) {
+          try {
+            const rawResults = await similaritySearch(
+              normalizedUrl,
+              Array(1024).fill(0), // Dummy embedding
+              input.maxResults,
+              1024 // dummy dimension
+            );
 
-          const matchingChunks = rawResults.slice(0, input.maxResults);
-          queryResults.push({
-            query,
-            results: RelevantChunkMapper.mapChunksToRelevant(matchingChunks),
-          });
-        } catch (fallbackError) {
-          childLogger.warn(
-            { error: fallbackError, query },
-            'Fallback search also failed - returning empty results'
-          );
-          queryResults.push({
-            query,
-            results: [],
-          });
+            const matchingChunks = rawResults.slice(0, input.maxResults);
+            queryResults.push({
+              query,
+              results: RelevantChunkMapper.mapChunksToRelevant(matchingChunks),
+            });
+          } catch (fallbackError) {
+            childLogger.warn(
+              { error: fallbackError, query },
+              'Fallback search also failed - returning empty results'
+            );
+            queryResults.push({
+              query,
+              results: [],
+            });
+          }
         }
       }
     }

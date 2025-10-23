@@ -88,6 +88,36 @@ export async function similaritySearch(
   });
 }
 
+/**
+ * Retrieve all chunks for a given URL in document order (by creation timestamp).
+ * Returns chunks without similarity scoring - useful for retrieving complete page content.
+ *
+ * @param url - The URL to retrieve chunks for
+ * @param opts - Optional correlation ID for logging
+ * @returns Array of chunks ordered by creation time (document flow order)
+ */
+export async function getAllChunksByUrl(
+  url: string,
+  opts?: { correlationId?: string }
+): Promise<Omit<SimilarChunkRow, 'score'>[]> {
+  const log = opts?.correlationId ? createChildLogger(opts.correlationId) : undefined;
+  const pool = await getPool(opts);
+
+  return await withTiming(
+    log ?? (console as unknown as pino.Logger),
+    'db.getAllChunksByUrl',
+    async () =>
+      pool.withConnection(async conn => {
+        const sql = `SELECT id, text, section_path
+         FROM chunks
+         WHERE url = $1
+         ORDER BY created_at ASC`;
+        const rows = await promisifyAll<Omit<SimilarChunkRow, 'score'>>(conn, sql, [url]);
+        return rows;
+      })
+  );
+}
+
 export async function deleteChunkById(id: string): Promise<void> {
   const pool = await getPool();
   await pool.withConnection(async conn => {
