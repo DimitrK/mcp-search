@@ -1,5 +1,5 @@
 const { DuckDBInstance } = require('@duckdb/node-api');
-const { join, dirname } = require('path');
+const { join } = require('path');
 const { mkdirSync, rmSync } = require('fs');
 
 const dbDir = join(__dirname, 'db-diagnostics');

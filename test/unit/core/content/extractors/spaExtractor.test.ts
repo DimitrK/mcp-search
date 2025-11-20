@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, test, expect } from '@jest/globals';
 import { extractWithSpa } from '../../../../../src/core/content/extractors/spaExtractor';
 
 // Mock HTML content that would be rendered by JavaScript
