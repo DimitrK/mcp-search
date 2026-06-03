@@ -1,17 +1,17 @@
 import { request } from 'undici';
-import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 import type pino from 'pino';
 import { getEnvironment } from '../../config/environment';
-import { withTiming } from '../../utils/logger';
+import {
+  BatchedSearchProvider,
+  boundedResultsPerQuery,
+  displayLinkFromUrl,
+  SearchProviderOptions,
+  SearchProviderResponse,
+  SearchQueryResult,
+  SearchTimeRange,
+} from './searchProvider';
 
 const GOOGLE_API_BASE_URL = 'https://www.googleapis.com';
-
-export interface GoogleSearchResult {
-  queries: Array<{
-    query: string;
-    result: unknown;
-  }>;
-}
 
 interface GoogleApiResponse {
   items?: Array<{ title: string } & Record<string, unknown>>;
@@ -19,14 +19,16 @@ interface GoogleApiResponse {
   [key: string]: unknown;
 }
 
-export class GoogleClient {
+export class GoogleClient extends BatchedSearchProvider {
+  readonly name = 'google' as const;
+  readonly displayName = 'Google Custom Search';
+
   private apiKey: string;
   private searchEngineId: string;
-  private concurrency: number;
-  private limiter: RateLimiterMemory;
-  private logger?: pino.Logger;
 
   constructor(apiKey: string, searchEngineId: string, logger?: pino.Logger) {
+    super(getEnvironment().CONCURRENCY, logger);
+
     if (!apiKey) {
       throw new Error('Google API key is required');
     }
@@ -35,45 +37,24 @@ export class GoogleClient {
     }
     this.apiKey = apiKey;
     this.searchEngineId = searchEngineId;
-    this.concurrency = getEnvironment().CONCURRENCY;
-    this.limiter = new RateLimiterMemory({ points: this.concurrency, duration: 1 });
-    this.logger = logger;
   }
 
-  private async singleSearch(
+  protected async searchSingle(
     query: string,
-    resultsPerQuery = 5
-  ): Promise<{ query: string; result: unknown }> {
+    options?: SearchProviderOptions
+  ): Promise<SearchQueryResult> {
     const searchParams = new URLSearchParams({
       key: this.apiKey,
       cx: this.searchEngineId,
       q: query,
-      num: resultsPerQuery.toString(),
+      num: String(boundedResultsPerQuery(options?.resultsPerQuery, 10)),
     });
+    const dateRestrict = googleDateRestrictFromTimeRange(options?.timeRange);
+    if (dateRestrict) {
+      searchParams.set('dateRestrict', dateRestrict);
+    }
 
     const url = `${GOOGLE_API_BASE_URL}/customsearch/v1?${searchParams}`;
-
-    const acquireRateLimit = async (): Promise<void> => {
-      // Wait for available rate limit rather than erroring
-      // Ensures no retry on 429 at HTTP level while pacing requests
-      for (;;) {
-        try {
-          await this.limiter.consume('google.customsearch');
-          this.logger?.debug({ query, url }, 'Rate limit token acquired');
-          return;
-        } catch (e) {
-          const res = e as RateLimiterRes;
-          const delayMs = Math.max(50, res.msBeforeNext ?? 100);
-          this.logger?.debug(
-            { query, delayMs, remainingPoints: res.remainingPoints },
-            'Rate limited; waiting'
-          );
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      }
-    };
-
-    await acquireRateLimit();
 
     const attemptRequest = async (): Promise<{
       statusCode: number;
@@ -134,7 +115,31 @@ export class GoogleClient {
       }
 
       this.logger?.info({ query, statusCode }, 'Google Custom Search succeeded');
-      return { query, result: responseBody };
+      const items = responseBody.items
+        ?.filter(item => typeof item.link === 'string' && typeof item.title === 'string')
+        .map(item => ({
+          ...item,
+          title: item.title,
+          link: item.link as string,
+          displayLink:
+            typeof item.displayLink === 'string'
+              ? item.displayLink
+              : displayLinkFromUrl(item.link as string),
+          snippet: typeof item.snippet === 'string' ? item.snippet : '',
+          formattedUrl:
+            typeof item.formattedUrl === 'string' ? item.formattedUrl : (item.link as string),
+          raw: item,
+        }));
+
+      return {
+        query,
+        result: {
+          ...responseBody,
+          provider: this.name,
+          items,
+          raw: responseBody,
+        },
+      };
     }
 
     throw lastError ?? new Error('Google API request failed');
@@ -142,49 +147,23 @@ export class GoogleClient {
 
   async search(
     query: string | string[],
-    options?: {
-      resultsPerQuery?: number;
-    }
-  ): Promise<GoogleSearchResult> {
-    const queries = Array.isArray(query) ? query : [query];
-    this.logger?.debug({ queriesCount: queries.length }, 'Starting batched Google searches');
+    options?: SearchProviderOptions
+  ): Promise<SearchProviderResponse> {
+    return super.search(query, options);
+  }
+}
 
-    const searchPromises = queries.map(q => this.singleSearch(q, options?.resultsPerQuery));
-
-    // Simple concurrency limiting for now
-    const results: Array<{ query: string; result: unknown }> = [];
-    let lastFailure: unknown = null;
-    for (let i = 0; i < searchPromises.length; i += this.concurrency) {
-      const batch = searchPromises.slice(i, i + this.concurrency);
-      const batchNumber = Math.floor(i / this.concurrency) + 1;
-      const settled = await withTiming(
-        this.logger ?? (console as unknown as pino.Logger),
-        'google.search.batch',
-        async () => Promise.allSettled(batch),
-        { batchNumber, batchSize: batch.length }
-      );
-      for (const r of settled) {
-        if (r.status === 'fulfilled') {
-          results.push(r.value);
-        } else {
-          lastFailure = r.reason;
-          this.logger?.error(
-            { batchNumber, error: r.reason instanceof Error ? r.reason.message : String(r.reason) },
-            'Google search request failed'
-          );
-        }
-      }
-    }
-
-    if (results.length === 0 && lastFailure) {
-      throw lastFailure instanceof Error ? lastFailure : new Error(String(lastFailure));
-    }
-
-    const aggregated = { queries: results };
-    this.logger?.debug(
-      { queriesCount: aggregated.queries.length },
-      'Completed batched Google searches'
-    );
-    return aggregated;
+function googleDateRestrictFromTimeRange(timeRange?: SearchTimeRange): string | undefined {
+  switch (timeRange) {
+    case 'day':
+      return 'd1';
+    case 'week':
+      return 'w1';
+    case 'month':
+      return 'm1';
+    case 'year':
+      return 'y1';
+    default:
+      return undefined;
   }
 }

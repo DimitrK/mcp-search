@@ -9,7 +9,8 @@ services:
     restart: unless-stopped
     environment:
       # Required environment variables (override in .env file)
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-google}
+      - SEARCH_ENGINE_API_KEY=${SEARCH_ENGINE_API_KEY:-}
       - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
       - EMBEDDING_SERVER_URL=${EMBEDDING_SERVER_URL}
       - EMBEDDING_SERVER_API_KEY=${EMBEDDING_SERVER_API_KEY}

@@ -4,7 +4,7 @@
 
 - **Purpose**: Provide two MCP tools that help agents search the web and retrieve relevant or complete content from webpages with local semantic caching.
 - **Tools**:
-  - `web.search`: Google Custom Search API, batched queries, raw responses.
+  - `web.search`: Configured search provider adapter, batched queries, normalized responses.
   - `web.readFromPage`: Fetch/extract/chunk/embed/store content for a URL with two modes: (1) With query - return semantically matched chunks, (2) Without query - return all content chunks in document order.
 - **Key decisions**:
   - Embedded store: DuckDB + VSS extension.
@@ -34,19 +34,25 @@
 
 ### Environment Variables
 
-Required:
+Always required:
 
 ```
-GOOGLE_API_KEY
-GOOGLE_SEARCH_ENGINE_ID
 EMBEDDING_SERVER_URL
 EMBEDDING_SERVER_API_KEY
 EMBEDDING_MODEL_NAME
 ```
 
+Provider-specific:
+
+```
+SEARCH_ENGINE_API_KEY         # required when SEARCH_PROVIDER=google, brave, or tavily
+GOOGLE_SEARCH_ENGINE_ID        # required when SEARCH_PROVIDER=google
+```
+
 Optional (defaults in parentheses):
 
 ```
+SEARCH_PROVIDER               # default google; one of google, brave, duckduckgo, tavily
 DATA_DIR                      # default via env-paths (e.g., ~/Library/Application Support/mcp-search)
 SIMILARITY_THRESHOLD          # default 0.6
 EMBEDDING_TOKENS_SIZE         # default 512
@@ -67,13 +73,16 @@ export const SearchInput = z.object({
   resultsPerQuery: z.number().int().min(1).max(50).default(5),
   minimal: z.boolean().default(true).optional(),
   enableSimilaritySearch: z.boolean().default(true).optional(),
+  topic: z.enum(['general', 'news', 'finance']).default('general').optional(),
+  searchDepth: z.enum(['basic', 'advanced', 'fast', 'ultra-fast']).default('basic').optional(),
+  timeRange: z.enum(['day', 'week', 'month', 'year']).optional(),
 });
 
 export const SearchOutput = z.object({
   queries: z.array(
     z.object({
       query: z.string(),
-      result: z.unknown() // raw Google JSON for that query
+      result: z.unknown() // normalized provider result for that query
     })
   )
 });
@@ -184,8 +193,15 @@ LIMIT ?;
 
 ### `web.search` Behavior
 
-- Accepts `string | string[]`; when array, execute in parallel up to `CONCURRENCY`. `resultsPerQuery` applies per item; total results = `x * n`.
-- Always returns raw Google JSON per input query.
+- Uses the configured search provider adapter from `SEARCH_PROVIDER`.
+- Google, Brave, and Tavily receive `SEARCH_ENGINE_API_KEY`; Google also requires `GOOGLE_SEARCH_ENGINE_ID`.
+- Brave normalizes both top-level `web.results` and `news.results` into the shared search item shape.
+- Tavily normalizes top-level `results`, preserving `score`, `published_date`, `raw_content`, `favicon`, `response_time`, and `request_id` when present.
+- Provider hints are adapter-specific: `timeRange` maps to Google `dateRestrict`, Brave `freshness`, and Tavily `time_range`; `topic=news` maps to Brave `result_filter=news`; Tavily supports `topic`, `searchDepth`, and `timeRange`.
+- Adapters clamp `resultsPerQuery` to provider API limits before sending outbound requests.
+- Accepts `string | string[]`; when array, executes batches up to `CONCURRENCY`. `resultsPerQuery` applies per item; total results = `x * n`.
+- Adapters normalize provider-specific responses into shared `items` entries containing `title`, `link`, `displayLink`, `snippet`, and `formattedUrl`.
+- Provider-specific payloads are retained under `raw` when available.
 
 ### `web.readFromPage` Behavior
 
@@ -219,7 +235,7 @@ LIMIT ?;
 ### Concurrency & Rate Limits
 
 - Global concurrency cap `CONCURRENCY` (default 2) across network-bound ops.
-- Google calls rate-limited via `rate-limiter-flexible`; no retry on 429; single retry on 5xx with jitter.
+- Provider calls are rate-limited via `rate-limiter-flexible`; Google retries once on 5xx with jitter and does not retry 429.
 - Embedding requests batched with backpressure under the same cap.
 
 ### Error Handling
@@ -300,6 +316,9 @@ src/
   core/
     search/
       googleClient.ts              # Google Custom Search API client
+      searchProvider.ts            # Provider-neutral search adapter contract
+      searchProviderFactory.ts     # Environment-based provider selection
+      providers/                   # Brave, DuckDuckGo, and Tavily provider adapters
     content/
       httpContentFetcher.ts        # HTTP content fetching
       htmlContentExtractor.ts      # HTML content extraction (Readability + Cheerio)

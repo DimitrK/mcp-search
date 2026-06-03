@@ -3,37 +3,68 @@ import envPaths from 'env-paths';
 import { join } from 'path';
 import fs from 'fs';
 
-const EnvironmentSchema = z.object({
-  // Required environment variables
-  GOOGLE_API_KEY: z.string().min(1, 'Google API key is required'),
-  GOOGLE_SEARCH_ENGINE_ID: z.string().min(1, 'Google Search Engine ID is required'),
-  EMBEDDING_SERVER_URL: z.string().url('Valid embedding server URL is required'),
-  EMBEDDING_SERVER_API_KEY: z.string().min(1, 'Embedding server API key is required'),
-  EMBEDDING_MODEL_NAME: z.string().min(1, 'Embedding model name is required'),
+const EnvironmentSchema = z
+  .object({
+    // Required environment variables
+    SEARCH_ENGINE_API_KEY: z.string().optional(),
+    GOOGLE_SEARCH_ENGINE_ID: z.string().optional(),
+    EMBEDDING_SERVER_URL: z.string().url('Valid embedding server URL is required'),
+    EMBEDDING_SERVER_API_KEY: z.string().min(1, 'Embedding server API key is required'),
+    EMBEDDING_MODEL_NAME: z.string().min(1, 'Embedding model name is required'),
 
-  // Optional environment variables with defaults
-  DATA_DIR: z.string().optional(),
-  SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.6),
-  EMBEDDING_TOKENS_SIZE: z.coerce.number().int().positive().default(512),
-  REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
-  CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
+    // Optional environment variables with defaults
+    DATA_DIR: z.string().optional(),
+    SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.6),
+    EMBEDDING_TOKENS_SIZE: z.coerce.number().int().positive().default(512),
+    REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+    CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
 
-  // Embedding-specific configuration
-  EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(32).default(8),
+    // Embedding-specific configuration
+    EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(32).default(8),
 
-  // Search integration configuration
-  ENABLE_SIMILARITY_SEARCH: z
-    .union([z.literal('true'), z.literal('false')])
-    .default('true')
-    .optional(),
+    // Search integration configuration
+    SEARCH_PROVIDER: z.enum(['google', 'brave', 'duckduckgo', 'tavily']).default('google'),
+    ENABLE_SIMILARITY_SEARCH: z
+      .union([z.literal('true'), z.literal('false')])
+      .default('true')
+      .optional(),
 
-  // Vector DB execution mode
-  VECTOR_DB_MODE: z.enum(['inline', 'thread', 'process']).default('inline').optional(),
-  VECTOR_DB_RESTART_ON_CRASH: z.union([z.literal('true'), z.literal('false')]).optional(),
+    // Vector DB execution mode
+    VECTOR_DB_MODE: z.enum(['inline', 'thread', 'process']).default('inline').optional(),
+    VECTOR_DB_RESTART_ON_CRASH: z.union([z.literal('true'), z.literal('false')]).optional(),
 
-  // Node environment
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-});
+    // Node environment
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  })
+  .superRefine((env, ctx) => {
+    if (env.SEARCH_PROVIDER === 'google') {
+      if (!env.SEARCH_ENGINE_API_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['SEARCH_ENGINE_API_KEY'],
+          message: 'Search engine API key is required when SEARCH_PROVIDER=google',
+        });
+      }
+      if (!env.GOOGLE_SEARCH_ENGINE_ID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['GOOGLE_SEARCH_ENGINE_ID'],
+          message: 'Google Search Engine ID is required when SEARCH_PROVIDER=google',
+        });
+      }
+    }
+
+    if (
+      (env.SEARCH_PROVIDER === 'brave' || env.SEARCH_PROVIDER === 'tavily') &&
+      !env.SEARCH_ENGINE_API_KEY
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SEARCH_ENGINE_API_KEY'],
+        message: `Search engine API key is required when SEARCH_PROVIDER=${env.SEARCH_PROVIDER}`,
+      });
+    }
+  });
 
 export type Environment = z.infer<typeof EnvironmentSchema>;
 

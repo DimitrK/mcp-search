@@ -2,7 +2,7 @@
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
-process.env.GOOGLE_API_KEY = 'test-google-api-key';
+process.env.SEARCH_ENGINE_API_KEY = 'test-google-api-key';
 process.env.GOOGLE_SEARCH_ENGINE_ID = 'test-search-engine-id';
 process.env.EMBEDDING_SERVER_URL = 'https://test.embedding.server';
 process.env.EMBEDDING_SERVER_API_KEY = 'test-embedding-api-key';

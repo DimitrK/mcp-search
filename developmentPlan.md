@@ -56,18 +56,19 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ---
 
-## Milestone 2: Google Search Implementation
+## Milestone 2: Search Provider Implementation
 
-**Goal**: Implement complete `web.search` tool with Google Custom Search API.
+**Goal**: Implement complete `web.search` tool with a provider adapter layer. Google Custom Search is the default adapter, with additional adapters able to normalize provider-specific payloads into the same result shape.
 
 ### Tasks:
 
-1. **Google Search Client** (TDD approach)
+1. **Search Provider Client** (TDD approach)
 
-   - Write unit tests for `core/search/googleClient.ts` first
-   - Implement Google client to pass tests
-   - Add API key validation and error handling (test-first)
-   - Implement rate limiting with `rate-limiter-flexible` (test-first)
+   - Write unit tests for provider adapters first
+   - Implement Google, Brave, DuckDuckGo, and Tavily adapters to pass tests
+   - Add provider-specific credential validation and error handling (test-first)
+   - Implement shared batching and rate limiting with `rate-limiter-flexible` (test-first)
+   - Normalize provider payloads into the shared search result item shape (test-first)
 
 2. **Search Tool Implementation** (TDD approach)
    - Write unit tests for `mcp/tools/webSearch.ts` first
@@ -78,10 +79,11 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ### Acceptance Criteria:
 
-- [x] Single search query returns raw Google JSON
+- [x] Single search query returns normalized provider results
 - [x] Array of queries returns results for each query
 - [x] Rate limiting prevents API abuse
 - [x] Proper error handling for API failures
+- [x] Adapter-specific raw payloads remain available for callers that need them
 - [x] All tests pass
 
 ### Verification:
@@ -90,7 +92,7 @@ npx @modelcontextprotocol/inspector mcp-search
 # Test with MCP inspector
 web.search({ query: "TypeScript MCP", resultsPerQuery: 5 })
 
-# Should return Google Custom Search JSON response
+# Should return normalized results from the configured SEARCH_PROVIDER
 # Test with array: ["TypeScript", "MCP server"]
 ```
 

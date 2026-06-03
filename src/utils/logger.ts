@@ -4,7 +4,7 @@ import { getTransport } from './getTransport';
 
 // Sensitive keys to redact from logs
 const SENSITIVE_KEYS = [
-  'GOOGLE_API_KEY',
+  'SEARCH_ENGINE_API_KEY',
   'EMBEDDING_SERVER_API_KEY',
   'password',
   'token',

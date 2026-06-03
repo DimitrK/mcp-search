@@ -8,13 +8,13 @@ import {
   GoogleSearchItemMinimalType,
   InPageMatchingReferencesType,
 } from '../mcp/schemas';
-import { GoogleClient } from '../core/search/googleClient';
 import { getEnvironment } from '../config/environment';
 import { normalizeUrl } from '../utils/urlValidator';
 import { generateCorrelationId } from '../utils/logger';
 import { InPageMatchingReferencesMapper } from '../core/similarity/mappers/inPageMatchingReferencesMapper';
 import { handleReadFromPage } from './readFromPage';
 import type { HandlerContext } from '../mcp/mcpServer';
+import { createSearchProviderFromEnvironment } from '../core/search/searchProviderFactory';
 
 /**
  * Fetches and indexes a URL using readFromPage, returning similarity search results
@@ -80,20 +80,22 @@ export async function handleWebSearch(
   childLogger.info({ input }, 'Processing web search request');
 
   const env = getEnvironment();
-  const { GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID } = env;
-  const googleClient = new GoogleClient(GOOGLE_API_KEY, GOOGLE_SEARCH_ENGINE_ID, childLogger);
+  const searchProvider = createSearchProviderFromEnvironment(env, childLogger);
 
-  // Phase 1: Execute Google Search
-  await context?.sendProgress(0, 100, 'Starting Google search...');
-  const rawResult = await googleClient.search(input.query, {
+  // Phase 1: Execute provider search
+  await context?.sendProgress(0, 100, `Starting ${searchProvider.displayName} search...`);
+  const rawResult = await searchProvider.search(input.query, {
     resultsPerQuery: input.resultsPerQuery,
+    topic: input.topic,
+    searchDepth: input.searchDepth,
+    timeRange: input.timeRange,
   });
 
   const enhancedResults: SearchResultWithSimilarityType[] = [];
 
   // Phase 2: Process each query result
   for (const queryResult of rawResult.queries) {
-    let enhancedGoogleResult: GoogleSearchResultMinimalType | GoogleSearchResultFullType;
+    let enhancedProviderResult: GoogleSearchResultMinimalType | GoogleSearchResultFullType;
 
     // Phase 3: Fetch and search URLs if similarity search is enabled
     if (
@@ -114,16 +116,16 @@ export async function handleWebSearch(
 
         if (urls.length > 0) {
           // Phase 3: Fetch and search URLs using readFromPage (handles crawling, indexing, and similarity search)
-          // Progress calculation: 1 step for Google search + 3 steps per URL
+          // Progress calculation: 1 step for provider search + 3 steps per URL
           // Each URL has 3 sub-steps: crawl, embeddings, similarity search
           const totalSteps = 1 + urls.length * 3;
-          let currentStep = 1; // Google search completed
+          let currentStep = 1; // Provider search completed
 
           childLogger.debug({ urlCount: urls.length, totalSteps }, 'Fetching and searching URLs');
           await context?.sendProgress(
             Math.round((currentStep / totalSteps) * 100),
             100,
-            `Google search completed. Processing ${urls.length} URL${urls.length > 1 ? 's' : ''}...`
+            `${searchProvider.displayName} search completed. Processing ${urls.length} URL${urls.length > 1 ? 's' : ''}...`
           );
 
           // Process URLs with granular progress updates
@@ -197,7 +199,7 @@ export async function handleWebSearch(
             }
           }
 
-          // Integrate search results into Google search items
+          // Integrate semantic matches into provider search items
           if (resultsMap.size > 0) {
             const enhancedItems = items.map(item => {
               const url = item.link as string;
@@ -228,26 +230,26 @@ export async function handleWebSearch(
               return item;
             });
 
-            // Update the Google result with enhanced items
+            // Update the provider result with enhanced items
             googleResult.items = enhancedItems;
           }
         }
       }
 
       // Apply minimal filtering
-      enhancedGoogleResult = input.minimal
-        ? minimizeGoogleResult(googleResult)
+      enhancedProviderResult = input.minimal
+        ? minimizeProviderResult(googleResult)
         : (googleResult as GoogleSearchResultFullType);
     } else {
       // No embedding service or invalid result, just apply minimal filtering
-      enhancedGoogleResult = input.minimal
-        ? minimizeGoogleResult(queryResult.result as Record<string, unknown>)
+      enhancedProviderResult = input.minimal
+        ? minimizeProviderResult(queryResult.result as Record<string, unknown>)
         : (queryResult.result as GoogleSearchResultFullType);
     }
 
     const enhancedResult: SearchResultWithSimilarityType = {
       query: queryResult.query,
-      result: enhancedGoogleResult,
+      result: enhancedProviderResult,
     };
 
     enhancedResults.push(enhancedResult);
@@ -281,7 +283,7 @@ export async function handleWebSearch(
   };
 }
 
-function minimizeGoogleResult(result: Record<string, unknown>): GoogleSearchResultMinimalType {
+function minimizeProviderResult(result: Record<string, unknown>): GoogleSearchResultMinimalType {
   const minimized: GoogleSearchResultMinimalType = {};
 
   if (Array.isArray(result.items)) {

@@ -10,7 +10,7 @@ A **production-ready** Model Context Protocol (MCP) server for web search and se
 
 ## ✨ Features
 
-- 🔍 **Google Custom Search**: Batch queries with rate limiting and error recovery
+- 🔍 **Search Provider Adapters**: Google Custom Search, Brave Search, DuckDuckGo, or Tavily with normalized results
 - 🧠 **Semantic Page Reading**: Extract and chunk content with embedding-based similarity search
 - 💾 **Local Vector Caching**: DuckDB + VSS extension for persistent, fast retrieval
 - 🛡️ **Production Security**: Input validation, content filtering, graceful degradation
@@ -27,7 +27,7 @@ Follow this guide to create your Google Search API credentials: [Programmable Se
 
 ### Installing MCP through NPM
 
-[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkaW1pdHJrL21jcC1zZWFyY2giXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW09QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIlNFQVJDSF9QUk9WSURFUiIsIi1lIiwiU0VBUkNIX0VOR0lORV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IlNFQVJDSF9QUk9WSURFUiI6Imdvb2dsZSIsIlNFQVJDSF9FTkdJTkVfQVBJX0tFWSI6IltFTlRFUiBTRUFSQ0ggRU5HSU5FIEFQSSBLRVldIiwiR09PR0xFX1NFQVJDSF9FTkdJTkVfSUQiOiJbRU5URVIgR09PR0xFIFNFQVJDSCBFTkdJTkUgSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW1lPVVIgT1BFTiBBSSBLRVldIiwiRU1CRURESU5HX01PREVMX05BTUUiOiJ0ZXh0LWVtYmVkZGluZy0zLXNtYWxsIiwiU0lNSUxBUklUWV9USFJFU0hPTEQiOiIwLjcyIn19)
 
 #### Install Playwright (optional - enables crawling SPAs)
 
@@ -45,7 +45,8 @@ npx playwright@1.55.1 install --with-deps chromium
       "command": "npx",
       "args": ["-y", "@dimitrk/mcp-search"],
       "env": {
-        "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
+        "SEARCH_PROVIDER": "google",
+        "SEARCH_ENGINE_API_KEY": "[ENTER SEARCH ENGINE API KEY]",
         "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ID]",
         "EMBEDDING_SERVER_URL": "https://api.openai.com",
         "EMBEDDING_SERVER_API_KEY": "[OPEN AI KEY]",
@@ -59,7 +60,7 @@ npx playwright@1.55.1 install --with-deps chromium
 
 ### Installing MCP through Docker
 
-[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIkdPT0dMRV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggRU5HSU5FIElEXSIsIkVNQkVERElOR19TRVJWRVJfVVJMIjoiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSI6IltZT1VSIE9QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIlNFQVJDSF9QUk9WSURFUiIsIi1lIiwiU0VBUkNIX0VOR0lORV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IlNFQVJDSF9QUk9WSURFUiI6Imdvb2dsZSIsIlNFQVJDSF9FTkdJTkVfQVBJX0tFWSI6IltFTlRFUiBTRUFSQ0ggRU5HSU5FIEFQSSBLRVldIiwiR09PR0xFX1NFQVJDSF9FTkdJTkVfSUQiOiJbRU5URVIgR09PR0xFIFNFQVJDSCBFTkdJTkUgSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW1lPVVIgT1BFTiBBSSBLRVldIiwiRU1CRURESU5HX01PREVMX05BTUUiOiJ0ZXh0LWVtYmVkZGluZy0zLXNtYWxsIiwiU0lNSUxBUklUWV9USFJFU0hPTEQiOiIwLjcyIn19)
 
 ```json
 {
@@ -71,7 +72,9 @@ npx playwright@1.55.1 install --with-deps chromium
         "-i",
         "--rm",
         "-e",
-        "GOOGLE_API_KEY",
+        "SEARCH_PROVIDER",
+        "-e",
+        "SEARCH_ENGINE_API_KEY",
         "-e",
         "GOOGLE_SEARCH_ENGINE_ID",
         "-e",
@@ -87,7 +90,8 @@ npx playwright@1.55.1 install --with-deps chromium
         "mcp-search:test"
       ],
       "env": {
-        "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
+        "SEARCH_PROVIDER": "google",
+        "SEARCH_ENGINE_API_KEY": "[ENTER SEARCH ENGINE API KEY]",
         "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ENGINE ID]",
         "EMBEDDING_SERVER_URL": "https://api.openai.com",
         "EMBEDDING_SERVER_API_KEY": "[YOUR OPEN AI KEY]",
@@ -105,8 +109,9 @@ npx playwright@1.55.1 install --with-deps chromium
 
 | Variable                   | Required | Default         | Description                         |
 | -------------------------- | -------- | --------------- | ----------------------------------- |
-| `GOOGLE_API_KEY`           | ✅       | -               | Google Custom Search API key        |
-| `GOOGLE_SEARCH_ENGINE_ID`  | ✅       | -               | Google Custom Search Engine ID      |
+| `SEARCH_PROVIDER`          | ❌       | `google`        | Search provider adapter: `google`, `brave`, `duckduckgo`, or `tavily` |
+| `SEARCH_ENGINE_API_KEY`    | ✅*      | -               | Search provider API key; required when `SEARCH_PROVIDER=google`, `SEARCH_PROVIDER=brave`, or `SEARCH_PROVIDER=tavily` |
+| `GOOGLE_SEARCH_ENGINE_ID`  | ✅*      | -               | Google Custom Search Engine ID; required when `SEARCH_PROVIDER=google` |
 | `EMBEDDING_SERVER_URL`     | ✅       | -               | OpenAI-compatible embedding API base URL; do not include `/v1` because the server appends `/v1/embeddings` |
 | `EMBEDDING_SERVER_API_KEY` | ✅       | -               | API key for embedding service       |
 | `EMBEDDING_MODEL_NAME`     | ✅       | -               | Model name for embeddings           |
@@ -119,6 +124,9 @@ npx playwright@1.55.1 install --with-deps chromium
 | `ENABLE_SIMILARITY_SEARCH` | ❌       | `true`          | Enable semantic enrichment for search results |
 | `VECTOR_DB_MODE`           | ❌       | `inline`        | `inline`, `thread` or `process`     |
 | `VECTOR_DB_RESTART_ON_CRASH` | ❌     | `false`         | Restart vector DB worker after worker crashes |
+
+`duckduckgo` uses DuckDuckGo's instant answer API and does not require a provider API key.
+Provider hints are adapter-specific: `timeRange` is sent to Google, Brave, and Tavily; `topic=news` is sent to Brave; Tavily supports `topic`, `searchDepth` (`basic`, `advanced`, `fast`, `ultra-fast`), and `timeRange`.
 
 ## Data Persistence & Storage
 
@@ -490,7 +498,8 @@ Create `.env` file:
 
 ```bash
 # Required
-GOOGLE_API_KEY=your_google_api_key_here
+SEARCH_PROVIDER=google
+SEARCH_ENGINE_API_KEY=your_search_engine_api_key_here
 GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
 EMBEDDING_SERVER_URL=https://api.openai.com
 EMBEDDING_SERVER_API_KEY=your_openai_api_key_here
@@ -502,6 +511,26 @@ SIMILARITY_THRESHOLD=0.6                 # Similarity cutoff (0-1)
 EMBEDDING_TOKENS_SIZE=512               # Chunk size in tokens
 REQUEST_TIMEOUT_MS=20000                # HTTP timeout
 CONCURRENCY=2                           # Concurrent requests
+```
+
+Search provider examples:
+
+```bash
+# Google Custom Search (default)
+SEARCH_PROVIDER=google
+SEARCH_ENGINE_API_KEY=your_google_api_key_here
+GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
+
+# Brave Search
+SEARCH_PROVIDER=brave
+SEARCH_ENGINE_API_KEY=your_brave_search_api_key_here
+
+# Tavily Search
+SEARCH_PROVIDER=tavily
+SEARCH_ENGINE_API_KEY=your_tavily_api_key_here
+
+# DuckDuckGo instant answers
+SEARCH_PROVIDER=duckduckgo
 ```
 
 ### Development Scripts
@@ -553,7 +582,7 @@ npm run test:performance -- --verbose
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   MCP Client    │────│   MCP Server     │────│  Google Search  │
+│   MCP Client    │────│   MCP Server     │────│ Search Provider │
 │   (AI Agent)    │    │                  │    │      API        │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                 │
@@ -584,6 +613,7 @@ npm run test:performance -- --verbose
 ### Key Components
 
 - **MCP Server**: Protocol-compliant tool server
+- **Search Provider Adapters**: Google, Brave, DuckDuckGo, and Tavily providers normalize API-specific payloads into a shared `items` shape; Google maps `timeRange` to `dateRestrict`, Brave maps `timeRange` to `freshness` and can filter `topic=news`, and Tavily maps top-level `results`
 - **HTTP Fetcher**: Robust content retrieval with retries
 - **Content Extractors**: Multi-strategy HTML processing
 - **Semantic Chunker**: Token-aware content segmentation
@@ -655,7 +685,7 @@ docker-compose exec mcp-search node dist/cli.js health --verbose
 mcp-search health --verbose
 
 # Validate specific variables
-echo $GOOGLE_API_KEY | wc -c  # Should be >30 characters
+echo $SEARCH_ENGINE_API_KEY | wc -c  # Should be >30 characters for Google, Brave, or Tavily
 ```
 
 #### Database Issues
@@ -687,8 +717,22 @@ export REQUEST_TIMEOUT_MS=30000
 #### Network/API Issues
 
 ```bash
-# Test Google API
-curl "https://www.googleapis.com/customsearch/v1?key=$GOOGLE_API_KEY&cx=$GOOGLE_SEARCH_ENGINE_ID&q=test"
+# Test configured search provider
+# Google Custom Search
+curl "https://www.googleapis.com/customsearch/v1?key=$SEARCH_ENGINE_API_KEY&cx=$GOOGLE_SEARCH_ENGINE_ID&q=test"
+
+# Brave Search
+curl -H "X-Subscription-Token: $SEARCH_ENGINE_API_KEY" \
+  "https://api.search.brave.com/res/v1/web/search?q=test"
+
+# Tavily Search
+curl -X POST "https://api.tavily.com/search" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SEARCH_ENGINE_API_KEY" \
+  -d '{"query":"test","topic":"general","search_depth":"basic"}'
+
+# DuckDuckGo instant answers
+curl "https://api.duckduckgo.com/?q=test&format=json&no_html=1&skip_disambig=1"
 
 # Test embedding API
 curl -X POST "$EMBEDDING_SERVER_URL/v1/embeddings" \
@@ -726,15 +770,18 @@ npx @modelcontextprotocol/inspector mcp-search
 ```typescript
 interface SearchInput {
   query: string | string[]; // Search queries
-  resultsPerQuery?: number; // 1-50, default 5
-  minimal?: boolean; // Return compact Google result fields, default true
+  resultsPerQuery?: number; // 1-50, default 5; adapters cap to provider API limits
+  minimal?: boolean; // Return compact normalized result fields, default true
   enableSimilaritySearch?: boolean; // Enrich top results with page chunks, default true
+  topic?: 'general' | 'news' | 'finance'; // Provider hint; Tavily supports all values, Brave supports news filtering
+  searchDepth?: 'basic' | 'advanced' | 'fast' | 'ultra-fast'; // Tavily-only provider hint
+  timeRange?: 'day' | 'week' | 'month' | 'year'; // Supported by Google, Brave, and Tavily
 }
 
 interface SearchOutput {
   queries: Array<{
     query: string;
-    result: unknown; // Raw Google JSON
+    result: unknown; // Normalized provider result with raw provider payload when available
   }>;
 }
 ```

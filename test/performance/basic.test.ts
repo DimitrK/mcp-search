@@ -4,7 +4,7 @@
  */
 
 // Mock environment for performance tests
-process.env.GOOGLE_API_KEY = 'test-key';
+process.env.SEARCH_ENGINE_API_KEY = 'test-key';
 process.env.GOOGLE_SEARCH_ENGINE_ID = 'test-engine';
 process.env.EMBEDDING_SERVER_URL = 'http://localhost:3000';
 process.env.EMBEDDING_SERVER_API_KEY = 'test-key';

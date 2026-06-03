@@ -2,9 +2,9 @@
 # MCP Search - AI Agent Instructions
 
 ## Project Overview
-MCP server providing web search and semantic page reading with local vector caching. Built with TypeScript (ESM), DuckDB+VSS for embeddings, and Google Custom Search API. Production-ready with Docker support and comprehensive testing.
+MCP server providing web search and semantic page reading with local vector caching. Built with TypeScript (ESM), DuckDB+VSS for embeddings, and pluggable search provider adapters. Production-ready with Docker support and comprehensive testing.
 
-**What this does**: Enables AI agents to search the web via Google Custom Search and extract semantically relevant content from webpages with local caching for fast retrieval.
+**What this does**: Enables AI agents to search the web via the configured search provider and extract semantically relevant content from webpages with local caching for fast retrieval.
 
 ## Architecture & Design Patterns
 
@@ -15,7 +15,7 @@ src/
 ├── handlers/     # Tool implementations (webSearch, readFromPage)
 ├── core/         # Business logic by domain:
 │   ├── content/  # Fetching, extraction, chunking
-│   ├── search/   # Google Custom Search client
+│   ├── search/   # Search provider adapters and factory
 │   ├── similarity/ # Manager pattern (NOT factory/service)
 │   └── vector/   # Embeddings + DuckDB with worker pool
 ├── config/       # Environment validation (Zod schemas)
@@ -136,7 +136,9 @@ describe('ResourceTests', () => {
 ## Critical Implementation Details
 
 ### Environment Variables (`src/config/environment.ts`)
-**Required**: `GOOGLE_API_KEY`, `GOOGLE_SEARCH_ENGINE_ID`, `EMBEDDING_SERVER_URL`, `EMBEDDING_SERVER_API_KEY`, `EMBEDDING_MODEL_NAME`
+**Required**: `EMBEDDING_SERVER_URL`, `EMBEDDING_SERVER_API_KEY`, `EMBEDDING_MODEL_NAME`, plus provider-specific search credentials (`SEARCH_ENGINE_API_KEY` for Google, Brave, or Tavily, and `GOOGLE_SEARCH_ENGINE_ID` for Google).
+
+**Search Providers**: `SEARCH_PROVIDER` selects `google`, `brave`, `duckduckgo`, or `tavily`. All search providers implement `src/core/search/searchProvider.ts` and normalize provider payloads into the shared `items` shape used by `web.search`. Provider hints are adapter-specific: Google maps `timeRange` to `dateRestrict`, Brave maps `timeRange` to `freshness` and `topic=news` to `result_filter=news`, and Tavily maps `topic`, `searchDepth`, and `timeRange`.
 
 **Singleton Pattern**: `getEnvironment()` validates once via Zod, caches result.
 **Docker Auto-Fix**: Rewrites `localhost` → `host.docker.internal` via `isRunningInDocker()`.
@@ -148,7 +150,7 @@ const correlationId = generateCorrelationId();
 const logger = createChildLogger(correlationId);
 ```
 
-**Auto-Redaction**: Removes `GOOGLE_API_KEY`, `EMBEDDING_SERVER_API_KEY`, `password`, `token` from logs.
+**Auto-Redaction**: Removes `SEARCH_ENGINE_API_KEY`, `EMBEDDING_SERVER_API_KEY`, `password`, `token` from logs.
 **Performance Tracking**: Use `withTiming()` wrapper:
 ```typescript
 await withTiming(logger, 'fetchContent', async () => { /* ... */ });

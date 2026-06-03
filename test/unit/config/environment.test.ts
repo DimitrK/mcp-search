@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import fs from 'fs';
 import {
   getEnvironment,
   validateEnvironment,
@@ -36,9 +37,58 @@ describe('Environment Configuration', () => {
   });
 
   test('should throw error for missing required variables', () => {
-    delete process.env.GOOGLE_API_KEY;
+    delete process.env.SEARCH_ENGINE_API_KEY;
 
     expect(() => getEnvironment()).toThrow('Environment validation failed');
+  });
+
+  test('should default to Google search provider', () => {
+    const env = getEnvironment();
+    expect(env.SEARCH_PROVIDER).toBe('google');
+  });
+
+  test('should allow DuckDuckGo provider without Google credentials', () => {
+    process.env.SEARCH_PROVIDER = 'duckduckgo';
+    delete process.env.SEARCH_ENGINE_API_KEY;
+    delete process.env.GOOGLE_SEARCH_ENGINE_ID;
+
+    const env = getEnvironment();
+    expect(env.SEARCH_PROVIDER).toBe('duckduckgo');
+  });
+
+  test('should require shared search engine API key when Brave provider is selected', () => {
+    process.env.SEARCH_PROVIDER = 'brave';
+    delete process.env.SEARCH_ENGINE_API_KEY;
+
+    expect(() => getEnvironment()).toThrow('Search engine API key is required');
+  });
+
+  test('should accept Brave provider when shared search engine API key is configured', () => {
+    process.env.SEARCH_PROVIDER = 'brave';
+    process.env.SEARCH_ENGINE_API_KEY = 'brave-key';
+    delete process.env.GOOGLE_SEARCH_ENGINE_ID;
+
+    const env = getEnvironment();
+    expect(env.SEARCH_PROVIDER).toBe('brave');
+    expect(env.SEARCH_ENGINE_API_KEY).toBe('brave-key');
+  });
+
+  test('should require shared search engine API key when Tavily provider is selected', () => {
+    process.env.SEARCH_PROVIDER = 'tavily';
+    delete process.env.SEARCH_ENGINE_API_KEY;
+    delete process.env.GOOGLE_SEARCH_ENGINE_ID;
+
+    expect(() => getEnvironment()).toThrow('Search engine API key is required');
+  });
+
+  test('should accept Tavily provider when shared search engine API key is configured', () => {
+    process.env.SEARCH_PROVIDER = 'tavily';
+    process.env.SEARCH_ENGINE_API_KEY = 'tavily-key';
+    delete process.env.GOOGLE_SEARCH_ENGINE_ID;
+
+    const env = getEnvironment();
+    expect(env.SEARCH_PROVIDER).toBe('tavily');
+    expect(env.SEARCH_ENGINE_API_KEY).toBe('tavily-key');
   });
 
   test('should provide data directory path', () => {
@@ -68,7 +118,6 @@ describe('Environment Configuration', () => {
   });
 
   describe('Docker Detection', () => {
-    const originalFs = require('fs');
     const originalProcessEnv = process.env;
 
     beforeEach(() => {
@@ -86,7 +135,7 @@ describe('Environment Configuration', () => {
     describe('isRunningInDocker', () => {
       test('should return false when not running in Docker', () => {
         // Mock fs.accessSync to throw for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             throw new Error('File not found');
           }
@@ -94,7 +143,7 @@ describe('Environment Configuration', () => {
         });
 
         // Mock fs.readFileSync to not contain docker
-        jest.spyOn(originalFs, 'readFileSync').mockImplementation(path => {
+        jest.spyOn(fs, 'readFileSync').mockImplementation(path => {
           if (path === '/proc/1/cgroup') {
             return '/user.slice/user-1000.slice/session-1.scope';
           }
@@ -106,7 +155,7 @@ describe('Environment Configuration', () => {
 
       test('should return true when .dockerenv file exists', () => {
         // Mock fs.accessSync to succeed for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             return undefined; // File exists
           }
@@ -120,7 +169,7 @@ describe('Environment Configuration', () => {
         process.env.DOCKER_CONTAINER = 'my-container';
 
         // Mock fs.accessSync to fail for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             throw new Error('File not found');
           }
@@ -132,7 +181,7 @@ describe('Environment Configuration', () => {
 
       test('should return true when cgroup contains docker', () => {
         // Mock fs.accessSync to fail for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             throw new Error('File not found');
           }
@@ -140,7 +189,7 @@ describe('Environment Configuration', () => {
         });
 
         // Mock fs.readFileSync to contain docker
-        jest.spyOn(originalFs, 'readFileSync').mockImplementation(path => {
+        jest.spyOn(fs, 'readFileSync').mockImplementation(path => {
           if (path === '/proc/1/cgroup') {
             return '1:name=systemd:/docker/abc123';
           }
@@ -152,7 +201,7 @@ describe('Environment Configuration', () => {
 
       test('should return true when cgroup contains containerd', () => {
         // Mock fs.accessSync to fail for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             throw new Error('File not found');
           }
@@ -160,7 +209,7 @@ describe('Environment Configuration', () => {
         });
 
         // Mock fs.readFileSync to contain containerd
-        jest.spyOn(originalFs, 'readFileSync').mockImplementation(path => {
+        jest.spyOn(fs, 'readFileSync').mockImplementation(path => {
           if (path === '/proc/1/cgroup') {
             return '1:name=systemd:/containerd/xyz789';
           }
@@ -174,7 +223,7 @@ describe('Environment Configuration', () => {
         process.env.DOCKER_CONTAINER = 'my-container';
 
         // Mock fs.accessSync to succeed for .dockerenv
-        jest.spyOn(originalFs, 'accessSync').mockImplementation(path => {
+        jest.spyOn(fs, 'accessSync').mockImplementation(path => {
           if (path === '/.dockerenv') {
             return undefined; // File exists
           }

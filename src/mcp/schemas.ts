@@ -26,7 +26,27 @@ export const SearchInput = z.object({
     .default(true)
     .optional()
     .describe(
-      'Enable semantic similarity search on discovered pages to return relevant content chunks (default: true). When disabled, returns only Google search results without content extraction.'
+      'Enable semantic similarity search on discovered pages to return relevant content chunks (default: true). When disabled, returns only provider search results without content extraction.'
+    ),
+  topic: z
+    .enum(['general', 'news', 'finance'])
+    .default('general')
+    .optional()
+    .describe(
+      'Provider topic hint. Tavily supports general, news, and finance; Brave supports news filtering; unsupported providers ignore it.'
+    ),
+  searchDepth: z
+    .enum(['basic', 'advanced', 'fast', 'ultra-fast'])
+    .default('basic')
+    .optional()
+    .describe(
+      'Provider search depth hint. Used by Tavily; ignored by providers that do not support it.'
+    ),
+  timeRange: z
+    .enum(['day', 'week', 'month', 'year'])
+    .optional()
+    .describe(
+      'Provider time range hint. Supported by Google, Brave, and Tavily; ignored by providers that do not support it.'
     ),
 });
 
@@ -52,7 +72,7 @@ export const InPageMatchingReferences = z.object({
   relevantChunks: z.array(RelevantChunk).describe('Array of relevant content chunks from the page'),
 });
 
-// Google Search Result Schemas
+// Search Result Schemas. The item shape is normalized across provider adapters.
 export const GoogleSearchItemMinimal = z.object({
   title: z.string().describe('Title of the search result'),
   link: z.string().url().describe('URL of the search result'),
@@ -137,7 +157,7 @@ export const SearchResultWithSimilarity = z.object({
   query: z.string(),
   result: z
     .union([GoogleSearchResultMinimal, GoogleSearchResultFull])
-    .describe('Google search result with optional inPageMatchingReferences added to items'),
+    .describe('Search provider result with optional inPageMatchingReferences added to items'),
 });
 
 export const SearchOutput = z.object({

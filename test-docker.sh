@@ -27,7 +27,8 @@ echo -e "${GREEN}✅ Docker image built successfully${NC}"
 echo -e "${YELLOW}📋 Step 3: Testing health check...${NC}"
 docker run --rm \
     -e NODE_ENV=production \
-    -e GOOGLE_API_KEY=test \
+    -e SEARCH_PROVIDER=google \
+    -e SEARCH_ENGINE_API_KEY=test \
     -e GOOGLE_SEARCH_ENGINE_ID=test \
     -e EMBEDDING_SERVER_URL=http://test \
     -e EMBEDDING_SERVER_API_KEY=test \
