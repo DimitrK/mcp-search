@@ -26,8 +26,8 @@ export class GoogleClient extends BatchedSearchProvider {
   private apiKey: string;
   private searchEngineId: string;
 
-  constructor(apiKey: string, searchEngineId: string, logger?: pino.Logger) {
-    super(getEnvironment().CONCURRENCY, logger);
+  constructor(apiKey: string, searchEngineId: string, logger?: pino.Logger, concurrency?: number) {
+    super(concurrency ?? getEnvironment().CONCURRENCY, logger);
 
     if (!apiKey) {
       throw new Error('Google API key is required');
