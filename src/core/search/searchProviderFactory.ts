@@ -12,8 +12,12 @@ export function createSearchProviderFromEnvironment(
 ): SearchProvider {
   switch (env.SEARCH_PROVIDER) {
     case 'google':
-      return new GoogleClient(env.SEARCH_ENGINE_API_KEY!, env.GOOGLE_SEARCH_ENGINE_ID!, logger);
-
+      return new GoogleClient(
+        env.SEARCH_ENGINE_API_KEY!,
+        env.GOOGLE_SEARCH_ENGINE_ID!,
+        logger,
+        env.CONCURRENCY
+      );
     case 'brave':
       return new BraveSearchProvider(env.SEARCH_ENGINE_API_KEY!, env.CONCURRENCY, logger);
 
