@@ -144,7 +144,7 @@ fetcher.fetch('https://example.com').then(console.log);
 "
 
 # Verify database creation
-ls ~/.local/share/mcp-search/db/mpc.duckdb
+ls ~/.local/share/mcp-search/db/mcp-*.duckdb
 ```
 
 ---
@@ -357,10 +357,10 @@ web.readFromPage({
 
 ```bash
 # Test correlation ID tracing
-mcp-search debug-server --trace-requests
+npm run mcp:debug
 
 # Test database inspection
-mcp-search inspect-db --url "https://example.com"
+npm run db:inspect -- --url "https://example.com"
 
 # Verify metrics collection
 # Should show timing data in structured logs
@@ -394,7 +394,7 @@ mcp-search inspect-db --url "https://example.com"
 ### Acceptance Criteria:
 
 - [ ] All tests pass consistently
-- [ ] Code coverage >90%
+- [ ] Code coverage meets the thresholds in `jest.config.js`
 - [ ] Performance targets met (P50 < 300ms cached, < 3s first-time)
 - [ ] No memory leaks in long-running tests
 - [ ] Golden tests ensure deterministic behavior
@@ -403,7 +403,7 @@ mcp-search inspect-db --url "https://example.com"
 
 ```bash
 npm run test:coverage
-# Should show >90% coverage
+# Should satisfy the configured coverage thresholds
 
 npm run test:integration
 # All integration tests pass
@@ -431,8 +431,8 @@ npm run test:performance
        "scripts": {
          "test:watch": "jest --watch",
          "test:debug": "node --inspect-brk jest",
-         "db:inspect": "mcp-search inspect-db",
-         "mcp:debug": "mcp-search debug-server",
+         "db:inspect": "node -r dotenv/config dist/cli.js inspect",
+         "mcp:debug": "node -r dotenv/config dist/cli.js server",
          "dev:with-inspector": "concurrently 'npm run build:watch' 'mcp-search server'"
        }
      }
@@ -469,7 +469,7 @@ npm run test:performance
 
 ```bash
 # Test NPM package installation
-npm install -g mcp-search
+npm install -g @dimitrk/mcp-search
 mcp-search --help
 
 # Test Docker deployment
@@ -521,7 +521,7 @@ docker run -p 3000:3000 mcp-search
 - Memory usage remains stable under load
 - Error rates < 1% under normal conditions
 - MCP debugging tools work seamlessly
-- Code coverage maintained >90%
+- Code coverage maintained at or above the thresholds in `jest.config.js`
 
 ---
 

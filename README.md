@@ -27,7 +27,7 @@ Follow this guide to create your Google Search API credentials: [Programmable Se
 
 ### Installing MCP through NPM
 
-[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkaW1pdHJrL21jcC1zZWFyY2giXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tL3YxIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW09QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBkaW1pdHJrL21jcC1zZWFyY2giXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW09QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
 
 #### Install Playwright (optional - enables crawling SPAs)
 
@@ -47,7 +47,7 @@ npx playwright@1.55.1 install --with-deps chromium
       "env": {
         "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
         "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ID]",
-        "EMBEDDING_SERVER_URL": "https://api.openai.com/v1",
+        "EMBEDDING_SERVER_URL": "https://api.openai.com",
         "EMBEDDING_SERVER_API_KEY": "[OPEN AI KEY]",
         "EMBEDDING_MODEL_NAME": "text-embedding-3-small",
         "SIMILARITY_THRESHOLD": "0.72"
@@ -59,7 +59,7 @@ npx playwright@1.55.1 install --with-deps chromium
 
 ### Installing MCP through Docker
 
-[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIkdPT0dMRV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggRU5HSU5FIElEXSIsIkVNQkVERElOR19TRVJWRVJfVVJMIjoiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSI6IltZT1VSIE9QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIkdPT0dMRV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IkdPT0dMRV9BUElfS0VZIjoiW0VOVEVSIEdPT0dMRSBBUEkgS0VZXSIsIkdPT0dMRV9TRUFSQ0hfRU5HSU5FX0lEIjoiW0VOVEVSIEdPT0dMRSBTRUFSQ0ggRU5HSU5FIElEXSIsIkVNQkVERElOR19TRVJWRVJfVVJMIjoiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSI6IltZT1VSIE9QRU4gQUkgS0VZXSIsIkVNQkVERElOR19NT0RFTF9OQU1FIjoidGV4dC1lbWJlZGRpbmctMy1zbWFsbCIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIjoiMC43MiJ9fQ%3D%3D)
 
 ```json
 {
@@ -89,7 +89,7 @@ npx playwright@1.55.1 install --with-deps chromium
       "env": {
         "GOOGLE_API_KEY": "[ENTER GOOGLE API KEY]",
         "GOOGLE_SEARCH_ENGINE_ID": "[ENTER GOOGLE SEARCH ENGINE ID]",
-        "EMBEDDING_SERVER_URL": "https://api.openai.com/v1",
+        "EMBEDDING_SERVER_URL": "https://api.openai.com",
         "EMBEDDING_SERVER_API_KEY": "[YOUR OPEN AI KEY]",
         "EMBEDDING_MODEL_NAME": "text-embedding-3-small",
         "SIMILARITY_THRESHOLD": "0.72"
@@ -107,17 +107,251 @@ npx playwright@1.55.1 install --with-deps chromium
 | -------------------------- | -------- | --------------- | ----------------------------------- |
 | `GOOGLE_API_KEY`           | ✅       | -               | Google Custom Search API key        |
 | `GOOGLE_SEARCH_ENGINE_ID`  | ✅       | -               | Google Custom Search Engine ID      |
-| `EMBEDDING_SERVER_URL`     | ✅       | -               | OpenAI-compatible embedding API URL |
+| `EMBEDDING_SERVER_URL`     | ✅       | -               | OpenAI-compatible embedding API base URL; do not include `/v1` because the server appends `/v1/embeddings` |
 | `EMBEDDING_SERVER_API_KEY` | ✅       | -               | API key for embedding service       |
 | `EMBEDDING_MODEL_NAME`     | ✅       | -               | Model name for embeddings           |
 | `DATA_DIR`                 | ❌       | OS app data dir | Data storage directory              |
 | `SIMILARITY_THRESHOLD`     | ❌       | 0.6             | Minimum similarity score (0-1)      |
 | `EMBEDDING_TOKENS_SIZE`    | ❌       | 512             | Chunk size in tokens                |
+| `EMBEDDING_BATCH_SIZE`     | ❌       | 8               | Embedding texts per API request (1-32) |
 | `REQUEST_TIMEOUT_MS`       | ❌       | 20000           | HTTP request timeout                |
 | `CONCURRENCY`              | ❌       | 2               | Max concurrent requests             |
-| `VECTOR_DB_MODE`           | ❌       | `inline`        | `inline`, `thead` or `process`      |
+| `ENABLE_SIMILARITY_SEARCH` | ❌       | `true`          | Enable semantic enrichment for search results |
+| `VECTOR_DB_MODE`           | ❌       | `inline`        | `inline`, `thread` or `process`     |
+| `VECTOR_DB_RESTART_ON_CRASH` | ❌     | `false`         | Restart vector DB worker after worker crashes |
 
-## 📖 Using it as a library
+## Data Persistence & Storage
+
+### How Embeddings Are Stored
+
+MCP Search uses **DuckDB** with the **VSS (Vector Similarity Search)** extension to store embeddings locally. The database file is isolated per embedding model.
+
+**Database File**: `{DATA_DIR}/db/mcp-{sanitized-model-name}.duckdb`
+
+**What's Stored**:
+- Document metadata (URL, title, last crawled timestamp, ETag)
+- Text chunks with section paths and token counts
+- Vector embeddings (dimension varies by model)
+- Embedding configuration (model name, dimension)
+
+### Storage Locations by Deployment Method
+
+#### NPX Deployment
+
+When using `npx @dimitrk/mcp-search`, the database is stored in your OS-specific application data directory:
+
+| Operating System | Default Location |
+|-----------------|------------------|
+| **macOS** | `~/Library/Application Support/mcp-search/db/mcp-{model}.duckdb` |
+| **Linux** | `~/.local/share/mcp-search/db/mcp-{model}.duckdb` |
+| **Windows** | `%LOCALAPPDATA%\mcp-search\db\mcp-{model}.duckdb` |
+
+**Custom Location**: Override with `DATA_DIR` environment variable:
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "env": {
+        "DATA_DIR": "/path/to/custom/location"
+      }
+    }
+  }
+}
+```
+
+**Persistence**: ✅ Data persists across runs and system restarts
+
+#### Docker Deployment
+
+**Container Path**: `/app/data/db/mcp-{model}.duckdb` (set via `ENV DATA_DIR=/app/data` in Dockerfile)
+
+**⚠️ Important**: Without a volume mount, data is **lost when the container stops** (due to `--rm` flag).
+
+**Recommended**: Use a **named volume** for persistence:
+
+```json
+{
+  "args": [
+    "run", "-i", "--rm",
+    "-v", "mcp_data:/app/data",  // ← Named volume for persistence
+    "mcp-search:latest"
+  ]
+}
+```
+
+**Volume Management**:
+```bash
+# List volumes
+docker volume ls
+
+# Inspect volume location
+docker volume inspect mcp_data
+
+# Backup volume
+docker run --rm -v mcp_data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/mcp-backup.tar.gz -C /data .
+
+# Restore volume
+docker run --rm -v mcp_data:/data -v $(pwd):/backup \
+  alpine tar xzf /backup/mcp-backup.tar.gz -C /data
+
+# Delete volume (careful!)
+docker volume rm mcp_data
+```
+
+**Alternative**: Use a **bind mount** for direct access:
+```bash
+docker run -i --rm \
+  -v ./data:/app/data \  # Bind mount to local ./data directory
+  mcp-search:latest
+```
+- ✅ Direct access to database file on host
+- ✅ Easy backup (just copy `./data` directory)
+- ⚠️ **Permissions**: Container runs as UID 1001, ensure directory is writable
+
+### Database Size & Performance
+
+**Typical Sizes** (varies by usage):
+- Empty database: ~100 KB
+- 10 pages cached: ~5-10 MB (depends on model dimension)
+- 100 pages cached: ~50-100 MB
+- 1000 pages cached: ~500 MB - 1 GB
+
+**Performance Characteristics**:
+- **Cached queries**: P50 < 300ms (reads from disk)
+- **First-time extraction**: 2-5s (depends on page size and network)
+- **Embedding generation**: Depends on external service (OpenAI: ~500ms for batch of 8)
+
+### Maintenance & Cleanup
+
+```bash
+# Check database health and size
+mcp-search health --verbose
+
+# Inspect what's stored
+mcp-search inspect --stats
+
+# Clean old cached data (default: >30 days)
+mcp-search cleanup --days 30
+
+# Clean and optimize database
+mcp-search cleanup --days 7 --vacuum
+
+# Preview what would be deleted (dry run)
+mcp-search cleanup --dry-run
+```
+
+### Configuration Changes & Migration
+
+**Important**: Changing certain configuration options has significant impacts on your cached data:
+
+#### ✅ Safe Changes (No Data Loss)
+
+**`EMBEDDING_TOKENS_SIZE` (Chunk Size)**
+- Changing from 512 → 1024 tokens is **safe**
+- Existing chunks remain with original size
+- New content uses new chunk size
+- All chunks coexist and are searchable together
+
+**`SIMILARITY_THRESHOLD`**
+- Safe to change anytime
+- Only affects which results are returned
+- No impact on stored data
+
+#### ⚠️ Destructive Changes (Data Loss)
+
+**Embedding Provider or Model Change** (e.g., OpenAI -> Cohere)
+- **Automatic isolation**: changing `EMBEDDING_MODEL_NAME` selects a different model-specific DB file.
+- **Impact**: cached data for the previous model is preserved, but the new model starts with an empty cache.
+- **Corruption guard**: if a model-specific DB somehow contains a different `embedding_model` value, startup fails with a model mismatch error rather than mixing embeddings.
+
+**Embedding Dimension Change** (Different model with different dimension)
+- **Automatic**: Chunks table is **dropped and recreated**
+- **Impact**: All cached embeddings are **deleted** (documents table preserved)
+- **What's Lost**: Vector embeddings only (must re-fetch and re-embed pages)
+- **What's Kept**: Document metadata (URLs, titles, ETags, timestamps)
+- **Log Message**: `Embedding dimension changed - recreating chunks table`
+
+**Example Scenario**:
+```bash
+# Start with text-embedding-3-small (1536 dimensions)
+EMBEDDING_MODEL_NAME=text-embedding-3-small
+
+# Switch to text-embedding-3-large (3072 dimensions)
+EMBEDDING_MODEL_NAME=text-embedding-3-large
+# → Automatic: Drops chunks table, keeps documents
+# → Next page fetch: Re-embeds content with new model
+```
+
+#### 📊 Migration Impact Summary
+
+| Change | Model Check | Dimension Check | Data Impact |
+|--------|-------------|-----------------|-------------|
+| Chunk size (512→1024) | ✅ N/A | ✅ N/A | ✅ None - coexist |
+| Same model, same dimension | ✅ Pass | ✅ Pass | ✅ None |
+| Different model name | ✅ Uses another DB file | - | ✅ Previous model cache preserved |
+| Same model, different dimension | ✅ Pass | ⚠️ **Auto-drop** | ⚠️ Embeddings deleted |
+| Different model + dimension | ✅ Uses another DB file | - | ✅ Previous model cache preserved |
+
+**Best Practice**: The server automatically creates separate database files for each embedding model (e.g., `mcp-text-embedding-3-small.duckdb`, `mcp-embed-english-v3-0.duckdb`). You can safely switch between models in the same `DATA_DIR`.
+
+### Data Isolation & Multi-Tenancy
+
+**Per-Model Database Isolation** (v0.1.4+):
+- Each embedding model automatically gets its own database file within `DATA_DIR/db/`
+- Database filename includes sanitized model name: `mcp-{model-name}.duckdb`
+- Safe to switch between models without data loss or conflicts
+- Different models can coexist in the same `DATA_DIR`
+
+**Example Database Files**:
+```
+~/.local/share/mcp-search/db/
+├── mcp-text-embedding-3-small.duckdb    # OpenAI model
+├── mcp-text-embedding-3-large.duckdb    # OpenAI larger model
+└── mcp-embed-english-v3-0.duckdb        # Cohere model
+```
+
+Each `DATA_DIR` can contain **multiple model databases**:
+- No cross-contamination between models
+- Dimension changes only affect that model's database
+- Easy A/B testing by switching `EMBEDDING_MODEL_NAME`
+
+**Example - Single Instance, Multiple Models**:
+```bash
+# Start with OpenAI model
+EMBEDDING_MODEL_NAME=text-embedding-3-small npx @dimitrk/mcp-search
+
+# Later switch to Cohere (both DBs coexist)
+EMBEDDING_MODEL_NAME=embed-english-v3.0 npx @dimitrk/mcp-search
+```
+
+**Legacy Multi-Instance Pattern** (still supported):
+If you prefer complete isolation, run separate instances with different `DATA_DIR` values:
+
+```json
+{
+  "mcpServers": {
+    "web-search-openai": {
+      "command": "npx",
+      "args": ["-y", "@dimitrk/mcp-search"],
+      "env": {
+        "DATA_DIR": "~/.mcp-search-openai",
+        "EMBEDDING_MODEL_NAME": "text-embedding-3-small"
+      }
+    },
+    "web-search-cohere": {
+      "command": "npx",
+      "args": ["-y", "@dimitrk/mcp-search"],
+      "env": {
+        "DATA_DIR": "~/.mcp-search-cohere",
+        "EMBEDDING_MODEL_NAME": "embed-english-v3.0"
+      }
+    }
+  }
+}
+```
+
+## Using It As A Library
 
 ### Command Line Interface
 
@@ -258,7 +492,7 @@ Create `.env` file:
 # Required
 GOOGLE_API_KEY=your_google_api_key_here
 GOOGLE_SEARCH_ENGINE_ID=your_search_engine_id_here
-EMBEDDING_SERVER_URL=https://api.openai.com/v1
+EMBEDDING_SERVER_URL=https://api.openai.com
 EMBEDDING_SERVER_API_KEY=your_openai_api_key_here
 EMBEDDING_MODEL_NAME=text-embedding-3-small  # Embedding model of your choice
 
@@ -275,7 +509,6 @@ CONCURRENCY=2                           # Concurrent requests
 ```bash
 # Development
 npm run dev                    # Start in development mode
-npm run dev:mock              # Use mock APIs for testing
 npm run build:watch          # Watch mode build
 
 # Testing
@@ -435,7 +668,7 @@ mcp-search inspect --stats
 mcp-search cleanup --days 0 --vacuum
 
 # Manual database reset
-rm ~/.mcp-search/db/mpc.duckdb
+rm ~/.mcp-search/db/mcp-*.duckdb
 ```
 
 #### Performance Issues
@@ -458,7 +691,7 @@ export REQUEST_TIMEOUT_MS=30000
 curl "https://www.googleapis.com/customsearch/v1?key=$GOOGLE_API_KEY&cx=$GOOGLE_SEARCH_ENGINE_ID&q=test"
 
 # Test embedding API
-curl -X POST "$EMBEDDING_SERVER_URL/embeddings" \
+curl -X POST "$EMBEDDING_SERVER_URL/v1/embeddings" \
   -H "Authorization: Bearer $EMBEDDING_SERVER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "'$EMBEDDING_MODEL_NAME'", "input": "test"}'
@@ -494,6 +727,8 @@ npx @modelcontextprotocol/inspector mcp-search
 interface SearchInput {
   query: string | string[]; // Search queries
   resultsPerQuery?: number; // 1-50, default 5
+  minimal?: boolean; // Return compact Google result fields, default true
+  enableSimilaritySearch?: boolean; // Enrich top results with page chunks, default true
 }
 
 interface SearchOutput {
@@ -509,9 +744,9 @@ interface SearchOutput {
 ```typescript
 interface ReadFromPageInput {
   url: string; // Target URL
-  query: string | string[]; // Search queries
+  query?: string | string[]; // Optional. Omit to return all page chunks in document order
   forceRefresh?: boolean; // Skip cache, default false
-  maxResults?: number; // 1-50, default 8
+  maxResults?: number; // 1-50, default 8. Ignored when query is omitted
   includeMetadata?: boolean; // Extra metadata, default false
 }
 
@@ -524,7 +759,7 @@ interface ReadFromPageOutput {
     results: Array<{
       id: string; // Stable chunk ID
       text: string; // Content text
-      score: number; // Similarity score 0-1
+      score?: number; // Similarity score 0-1; omitted when query is omitted
       sectionPath?: string[]; // Document structure
     }>;
   }>;
@@ -547,9 +782,9 @@ interface ReadFromPageOutput {
 ### Code Standards
 
 - **TypeScript**: Strict mode, explicit types
-- **ESLint**: Airbnb config with custom rules
+- **ESLint**: ESLint recommended, TypeScript recommended, Prettier integration, and local custom rules
 - **Prettier**: Consistent formatting
-- **Jest**: >90% test coverage requirement
+- **Jest**: Coverage thresholds enforced in `jest.config.js`
 - **Conventional Commits**: For changelog generation
 
 ### Release Process
