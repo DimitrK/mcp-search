@@ -15,7 +15,7 @@
 
 ### Technology Stack
 
-- **Language/Runtime**: TypeScript, Node 20+ (ESM)
+- **Language/Runtime**: TypeScript, Node 22+ (ESM)
 - **MCP SDK**: `@modelcontextprotocol/sdk` (latest version, best effort backward compatibility)
 - **Validation**: `zod` with schema validation
 - **HTTP**: `undici` with connection pooling
@@ -82,9 +82,9 @@ export const SearchOutput = z.object({
   queries: z.array(
     z.object({
       query: z.string(),
-      result: z.unknown() // normalized provider result for that query
+      result: z.unknown(), // normalized provider result for that query
     })
-  )
+  ),
 });
 
 // web.readFromPage tool schemas
@@ -93,14 +93,14 @@ export const ReadFromPageInput = z.object({
   query: z.union([z.string(), z.array(z.string())]).optional(),
   forceRefresh: z.boolean().default(false).optional(),
   maxResults: z.number().int().min(1).max(50).default(8).optional(),
-  includeMetadata: z.boolean().default(false).optional()
+  includeMetadata: z.boolean().default(false).optional(),
 });
 
 export const RelevantChunk = z.object({
   id: z.string(),
   text: z.string(),
   score: z.number().optional(), // Omitted when no query provided (full content retrieval)
-  sectionPath: z.array(z.string()).optional()
+  sectionPath: z.array(z.string()).optional(),
 });
 
 export const ReadFromPageOutput = z.object({
@@ -110,10 +110,10 @@ export const ReadFromPageOutput = z.object({
   queries: z.array(
     z.object({
       query: z.string(),
-      results: z.array(RelevantChunk)
+      results: z.array(RelevantChunk),
     })
   ),
-  note: z.string().optional()
+  note: z.string().optional(),
 });
 ```
 
@@ -208,6 +208,7 @@ LIMIT ?;
 **Two operational modes:**
 
 1. **With Query** (similarity search mode):
+
    - Accepts `query` as `string | string[]`
    - Embed queries → search chunks by URL scope → filter by `SIMILARITY_THRESHOLD` → return top `maxResults` per query
    - Returns chunks with similarity scores (0-1 range) ordered by relevance
@@ -221,6 +222,7 @@ LIMIT ?;
    - Single result entry with empty string `query: ""`
 
 **Common behavior:**
+
 - Both modes respect caching; `forceRefresh` bypasses cache
 - Output includes `lastCrawled` timestamp
 - `includeMetadata` returns additional context (section paths, stats)
@@ -284,7 +286,7 @@ LIMIT ?;
   - **Integration tests**: both MCP tools with mocked HTTP (`nock`) and HTML fixtures
   - **Golden tests**: deterministic chunk IDs and content extraction
   - **Error handling tests**: all error scenarios and fallback behaviors
-- **CI/CD**: GitHub Actions with lint, typecheck, test matrix on Node 20/22; automated npm publish on git tags.
+- **CI/CD**: GitHub Actions with lint, typecheck, test matrix on Node 22/24; automated npm publish on git tags.
 - **NPM Package**: Public package with MCP server entry point and optional CLI for debugging.
 - **Docker support**: For containerized deployments
 

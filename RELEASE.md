@@ -54,7 +54,7 @@ npm run release:push
 ### CI/CD Pipeline (npm run release:push)
 
 1. **Security Scan**: CodeQL + npm audit
-2. **Multi-Platform Tests**: Node 20.x + 22.x on Ubuntu, Windows, macOS
+2. **Multi-Platform Tests**: Node 22.x + 24.x on Ubuntu and macOS
 3. **Docker Build**: Multi-platform container images
 4. **NPM Publish**: Package published to npm registry
 5. **Docker Push**: Images pushed to Docker Hub

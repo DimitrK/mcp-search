@@ -466,7 +466,7 @@ EMBEDDING_TOKENS_SIZE=512
 
 ### Prerequisites
 
-- Node.js 20+ (22+ recommended)
+- Node.js 22+ (CI tests Node 22 and 24)
 - npm 9+
 - Docker (optional, for containerized development)
 - Git
