@@ -1,5 +1,5 @@
 # Multi-stage build for optimized production image
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -26,7 +26,7 @@ COPY src ./src
 RUN npm run build
 
 # Production stage
-FROM node:20-slim AS production
+FROM node:22-slim AS production
 
 # Install runtime dependencies (dumb-init for signal handling)
 RUN apt-get update && apt-get install -y \

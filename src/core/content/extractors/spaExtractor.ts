@@ -27,6 +27,8 @@ const TIMEOUTS = {
   BROWSER_CLEANUP: 5000,
 } as const;
 
+const PLAYWRIGHT_PACKAGE_NAME: string = 'playwright';
+
 export async function extractWithSpa(
   html: string,
   options: ExtractorOptions
@@ -41,7 +43,7 @@ export async function extractWithSpa(
       let playwright: any; // eslint-disable-line @typescript-eslint/no-explicit-any
       try {
         // Use dynamic import for ESM compatibility
-        const playwrightModule = await import('playwright');
+        const playwrightModule = await import(PLAYWRIGHT_PACKAGE_NAME);
         playwright = playwrightModule.default || playwrightModule;
       } catch (error) {
         logger.error(
