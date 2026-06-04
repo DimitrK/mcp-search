@@ -2,10 +2,10 @@
 
 ### Overview
 
-- **Purpose**: Provide two MCP tools that help agents search the web and retrieve only relevant content from a specific page with local semantic caching.
+- **Purpose**: Provide two MCP tools that help agents search the web and retrieve relevant or complete content from webpages with local semantic caching.
 - **Tools**:
-  - `web.search`: Google Custom Search API, batched queries, raw responses.
-  - `web.readFromPage`: Fetch/extract/chunk/embed/store content for a URL and return semantically matched chunks to user queries, scoped to that URL.
+  - `web.search`: Configured search provider adapter, batched queries, normalized responses.
+  - `web.readFromPage`: Fetch/extract/chunk/embed/store content for a URL with two modes: (1) With query - return semantically matched chunks, (2) Without query - return all content chunks in document order.
 - **Key decisions**:
   - Embedded store: DuckDB + VSS extension.
   - Embeddings: HTTP provider (OpenAI-compatible) for MVP.
@@ -16,42 +16,52 @@
 ### Technology Stack
 
 - **Language/Runtime**: TypeScript, Node 20+ (ESM)
-- **MCP SDK**: `modelcontextprotocol` (latest version, best effort backward compatibility)
+- **MCP SDK**: `@modelcontextprotocol/sdk` (latest version, best effort backward compatibility)
 - **Validation**: `zod` with schema validation
 - **HTTP**: `undici` with connection pooling
 - **HTML extraction**: `@mozilla/readability`, `cheerio`, `jsdom`
 - **Optional rendering**: `playwright` (dynamic import)
 - **Rate limiting**: `rate-limiter-flexible`
 - **In-memory cache**: Built-in (environment & logger caching)
-- **Persistent store**: `duckdb` with VSS extension
+- **Persistent store**: DuckDB (`@duckdb/node-api`) with VSS extension
 - **Filesystem paths**: `env-paths`
 - **Hashing**: Node.js built-in `crypto` (SHA-256)
 - **Logging**: `pino` with structured logging
-- **Build**: `tsdown` (esbuild)
+- **Build**: custom `build.mjs` using esbuild for JS plus `tsc` declarations
 - **Testing**: Jest + `ts-jest`, `nock` (HTTP mocks), `msw` optional
 - **Lint/format**: ESLint (`@typescript-eslint/recommended`, best practices rules), Prettier
 - **Package**: NPM distribution with proper exports and optional CLI
 
 ### Environment Variables
 
-Required:
+Always required:
 
 ```
-GOOGLE_API_KEY
-GOOGLE_SEARCH_ENGINE_ID
 EMBEDDING_SERVER_URL
 EMBEDDING_SERVER_API_KEY
 EMBEDDING_MODEL_NAME
 ```
 
+Provider-specific:
+
+```
+SEARCH_ENGINE_API_KEY         # required when SEARCH_PROVIDER=google, brave, or tavily
+GOOGLE_SEARCH_ENGINE_ID        # required when SEARCH_PROVIDER=google
+```
+
 Optional (defaults in parentheses):
 
 ```
+SEARCH_PROVIDER               # default google; one of google, brave, duckduckgo, tavily
 DATA_DIR                      # default via env-paths (e.g., ~/Library/Application Support/mcp-search)
-SIMILARITY_THRESHOLD          # default 0.72
+SIMILARITY_THRESHOLD          # default 0.6
 EMBEDDING_TOKENS_SIZE         # default 512
+EMBEDDING_BATCH_SIZE          # default 8, max 32
 REQUEST_TIMEOUT_MS            # default 20000
 CONCURRENCY                   # default 2
+ENABLE_SIMILARITY_SEARCH      # default true
+VECTOR_DB_MODE                # default inline; one of inline, thread, process
+VECTOR_DB_RESTART_ON_CRASH    # default false
 ```
 
 ### Tool Contracts (Zod)
@@ -61,21 +71,26 @@ CONCURRENCY                   # default 2
 export const SearchInput = z.object({
   query: z.union([z.string(), z.array(z.string())]),
   resultsPerQuery: z.number().int().min(1).max(50).default(5),
+  minimal: z.boolean().default(true).optional(),
+  enableSimilaritySearch: z.boolean().default(true).optional(),
+  topic: z.enum(['general', 'news', 'finance']).default('general').optional(),
+  searchDepth: z.enum(['basic', 'advanced', 'fast', 'ultra-fast']).default('basic').optional(),
+  timeRange: z.enum(['day', 'week', 'month', 'year']).optional(),
 });
 
 export const SearchOutput = z.object({
   queries: z.array(
     z.object({
       query: z.string(),
-      result: z.unknown() // raw Google JSON for that query
+      result: z.unknown() // normalized provider result for that query
     })
   )
 });
 
-// web.readFromPage
+// web.readFromPage tool schemas
 export const ReadFromPageInput = z.object({
   url: z.string().url(),
-  query: z.union([z.string(), z.array(z.string())]),
+  query: z.union([z.string(), z.array(z.string())]).optional(),
   forceRefresh: z.boolean().default(false).optional(),
   maxResults: z.number().int().min(1).max(50).default(8).optional(),
   includeMetadata: z.boolean().default(false).optional()
@@ -84,7 +99,7 @@ export const ReadFromPageInput = z.object({
 export const RelevantChunk = z.object({
   id: z.string(),
   text: z.string(),
-  score: z.number(),
+  score: z.number().optional(), // Omitted when no query provided (full content retrieval)
   sectionPath: z.array(z.string()).optional()
 });
 
@@ -104,7 +119,8 @@ export const ReadFromPageOutput = z.object({
 
 ### DuckDB + VSS Schema
 
-- Single DB file at `DATA_DIR/db/mpc.duckdb`
+- Per-model DB file at `DATA_DIR/db/mcp-{sanitized-model-name}.duckdb`.
+- The filename is derived from `EMBEDDING_MODEL_NAME` by lowercasing, replacing non-alphanumeric characters with hyphens, and trimming leading/trailing hyphens.
 
 ```sql
 CREATE TABLE IF NOT EXISTS meta (
@@ -134,12 +150,12 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 
 CREATE INDEX IF NOT EXISTS chunks_url_idx ON chunks(url);
-CREATE INDEX IF NOT EXISTS chunks_vss_idx ON chunks USING vss(embedding) WITH (metric='cosine');
 ```
 
 Notes:
 
-- Store both `embedding_model` and `embedding_dim` in `meta` table on first embed; validate both on startup to ensure consistency.
+- Store both `embedding_model` and `embedding_dim` in `meta` table on first embed. Model mismatches are treated as DB corruption because each model should have its own DB file.
+- Dimension changes for the same model drop and recreate the `chunks` table for that model-specific database only.
 - All similarity search operations are scoped by `url`.
 - Upsert only changed/new chunks using stable content hashes.
 - Connection pooling manages concurrent access to file-based DuckDB.
@@ -171,14 +187,43 @@ LIMIT ?;
 
 ### Embeddings Provider (HTTP)
 
-- OpenAI-compatible `POST /v1/embeddings` with `model: EMBEDDING_MODEL_NAME`.
-- Batch up to ~32 texts per request. One retry for 5xx with jitter. No retry for 429.
+- `EMBEDDING_SERVER_URL` is the base URL; the provider calls `POST {EMBEDDING_SERVER_URL}/v1/embeddings` with `model: EMBEDDING_MODEL_NAME`.
+- Batch up to 32 texts per request (`EMBEDDING_BATCH_SIZE`, default 8). One retry for 5xx with jitter. No retry for 429.
 - On failure, degrade by returning longest content blocks and set `note` in output.
 
 ### `web.search` Behavior
 
-- Accepts `string | string[]`; when array, execute in parallel up to `CONCURRENCY`. `resultsPerQuery` applies per item; total results = `x * n`.
-- Always returns raw Google JSON per input query.
+- Uses the configured search provider adapter from `SEARCH_PROVIDER`.
+- Google, Brave, and Tavily receive `SEARCH_ENGINE_API_KEY`; Google also requires `GOOGLE_SEARCH_ENGINE_ID`.
+- Brave normalizes both top-level `web.results` and `news.results` into the shared search item shape.
+- Tavily normalizes top-level `results`, preserving `score`, `published_date`, `raw_content`, `favicon`, `response_time`, and `request_id` when present.
+- Provider hints are adapter-specific: `timeRange` maps to Google `dateRestrict`, Brave `freshness`, and Tavily `time_range`; `topic=news` maps to Brave `result_filter=news`; Tavily supports `topic`, `searchDepth`, and `timeRange`.
+- Adapters clamp `resultsPerQuery` to provider API limits before sending outbound requests.
+- Accepts `string | string[]`; when array, executes batches up to `CONCURRENCY`. `resultsPerQuery` applies per item; total results = `x * n`.
+- Adapters normalize provider-specific responses into shared `items` entries containing `title`, `link`, `displayLink`, `snippet`, and `formattedUrl`.
+- Provider-specific payloads are retained under `raw` when available.
+
+### `web.readFromPage` Behavior
+
+**Two operational modes:**
+
+1. **With Query** (similarity search mode):
+   - Accepts `query` as `string | string[]`
+   - Embed queries → search chunks by URL scope → filter by `SIMILARITY_THRESHOLD` → return top `maxResults` per query
+   - Returns chunks with similarity scores (0-1 range) ordered by relevance
+   - Processes multiple queries in parallel batches up to `CONCURRENCY` limit
+
+2. **Without Query** (full content retrieval mode):
+   - Triggered when `query` is: undefined (omitted), empty string `""`, empty array `[]`, or array of whitespace strings
+   - Retrieves ALL chunks for the URL ordered by `created_at` (document flow order)
+   - Ignores `maxResults` parameter - returns complete page content
+   - Returns chunks WITHOUT `score` field (score is omitted, not 0 or null)
+   - Single result entry with empty string `query: ""`
+
+**Common behavior:**
+- Both modes respect caching; `forceRefresh` bypasses cache
+- Output includes `lastCrawled` timestamp
+- `includeMetadata` returns additional context (section paths, stats)
 
 ### Caching & Invalidation
 
@@ -190,7 +235,7 @@ LIMIT ?;
 ### Concurrency & Rate Limits
 
 - Global concurrency cap `CONCURRENCY` (default 2) across network-bound ops.
-- Google calls rate-limited via `rate-limiter-flexible`; no retry on 429; single retry on 5xx with jitter.
+- Provider calls are rate-limited via `rate-limiter-flexible`; Google retries once on 5xx with jitter and does not retry 429.
 - Embedding requests batched with backpressure under the same cap.
 
 ### Error Handling
@@ -256,25 +301,32 @@ LIMIT ?;
 
 ```
 src/
-  server.ts                        # MCP server entry point
+  cli.ts                           # CLI entry point
+  server.ts                        # MCP server orchestration
   config/
     environment.ts                 # Environment variable validation
     constants.ts                   # Application constants
   mcp/
     schemas.ts                     # Zod schemas for tool inputs/outputs
-    tools/
-      webSearch.ts                 # web.search tool implementation
-      readFromPage.ts              # web.readFromPage tool implementation
     errors.ts                      # MCP-compliant error classes
+    mcpServer.ts                   # Tool registration and MCP protocol setup
+  handlers/
+    webSearch.ts                   # web.search tool implementation
+    readFromPage.ts                # web.readFromPage tool implementation
   core/
     search/
       googleClient.ts              # Google Custom Search API client
-      rateLimiter.ts               # Rate limiting logic
+      searchProvider.ts            # Provider-neutral search adapter contract
+      searchProviderFactory.ts     # Environment-based provider selection
+      providers/                   # Brave, DuckDuckGo, and Tavily provider adapters
     content/
       httpContentFetcher.ts        # HTTP content fetching
       htmlContentExtractor.ts      # HTML content extraction (Readability + Cheerio)
-      chunker.ts            # Semantic content chunking
-      hasher.ts             # Content hashing utilities
+      chunker.ts                   # Semantic content chunking
+      extractors/                  # Readability, Cheerio, SPA, raw extraction strategies
+    similarity/
+      similaritySearchManager.ts   # Store/search orchestration and graceful degradation
+      mappers/                     # Output mappers for MCP response shapes
     vector/
       embeddingProvider.ts         # Embedding provider interface
       providers/
@@ -282,23 +334,23 @@ src/
         # Future: localEmbeddingProvider.ts for node-llama-cpp
       store/
         duckdbVectorStore.ts       # DuckDB + VSS storage implementation
-        vectorStoreSchema.ts       # Database schema definitions
+        schema.ts                  # Database schema definitions
+        workerPool.ts              # Inline/thread/process DB execution modes
   services/
-    playwrightWebScraper.ts        # Optional Playwright integration (dynamic import)
+    initialization.ts              # Environment and data directory initialization
   utils/
-    tokenEstimator.ts              # Token counting utilities (~4 chars/token)
     urlValidator.ts                # URL validation and normalization
     logger.ts                      # Structured logging setup
-    cache.ts                       # In-memory caching utilities
+    dataDirectory.ts               # DATA_DIR and DB directory creation
+    databaseInspector.ts           # CLI inspection helpers
+    databaseCleaner.ts             # CLI cleanup helpers
 test/
   unit/
     core/                          # Unit tests for core modules
+    handlers/                      # Unit tests for MCP handlers
     utils/                         # Unit tests for utilities
   integration/
-    tools/                         # Integration tests for MCP tools
-  fixtures/
-    htmlSamples/                   # Test HTML fixtures
-    apiResponses/                  # Mock API response fixtures
+    *.test.ts                      # Integration tests for MCP flows
   __mocks__/                       # Jest mocks
 ```
 

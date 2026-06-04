@@ -56,18 +56,19 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ---
 
-## Milestone 2: Google Search Implementation
+## Milestone 2: Search Provider Implementation
 
-**Goal**: Implement complete `web.search` tool with Google Custom Search API.
+**Goal**: Implement complete `web.search` tool with a provider adapter layer. Google Custom Search is the default adapter, with additional adapters able to normalize provider-specific payloads into the same result shape.
 
 ### Tasks:
 
-1. **Google Search Client** (TDD approach)
+1. **Search Provider Client** (TDD approach)
 
-   - Write unit tests for `core/search/googleClient.ts` first
-   - Implement Google client to pass tests
-   - Add API key validation and error handling (test-first)
-   - Implement rate limiting with `rate-limiter-flexible` (test-first)
+   - Write unit tests for provider adapters first
+   - Implement Google, Brave, DuckDuckGo, and Tavily adapters to pass tests
+   - Add provider-specific credential validation and error handling (test-first)
+   - Implement shared batching and rate limiting with `rate-limiter-flexible` (test-first)
+   - Normalize provider payloads into the shared search result item shape (test-first)
 
 2. **Search Tool Implementation** (TDD approach)
    - Write unit tests for `mcp/tools/webSearch.ts` first
@@ -78,10 +79,11 @@ npx @modelcontextprotocol/inspector mcp-search
 
 ### Acceptance Criteria:
 
-- [x] Single search query returns raw Google JSON
+- [x] Single search query returns normalized provider results
 - [x] Array of queries returns results for each query
 - [x] Rate limiting prevents API abuse
 - [x] Proper error handling for API failures
+- [x] Adapter-specific raw payloads remain available for callers that need them
 - [x] All tests pass
 
 ### Verification:
@@ -90,7 +92,7 @@ npx @modelcontextprotocol/inspector mcp-search
 # Test with MCP inspector
 web.search({ query: "TypeScript MCP", resultsPerQuery: 5 })
 
-# Should return Google Custom Search JSON response
+# Should return normalized results from the configured SEARCH_PROVIDER
 # Test with array: ["TypeScript", "MCP server"]
 ```
 
@@ -144,7 +146,7 @@ fetcher.fetch('https://example.com').then(console.log);
 "
 
 # Verify database creation
-ls ~/.local/share/mcp-search/db/mpc.duckdb
+ls ~/.local/share/mcp-search/db/mcp-*.duckdb
 ```
 
 ---
@@ -357,10 +359,10 @@ web.readFromPage({
 
 ```bash
 # Test correlation ID tracing
-mcp-search debug-server --trace-requests
+npm run mcp:debug
 
 # Test database inspection
-mcp-search inspect-db --url "https://example.com"
+npm run db:inspect -- --url "https://example.com"
 
 # Verify metrics collection
 # Should show timing data in structured logs
@@ -394,7 +396,7 @@ mcp-search inspect-db --url "https://example.com"
 ### Acceptance Criteria:
 
 - [ ] All tests pass consistently
-- [ ] Code coverage >90%
+- [ ] Code coverage meets the thresholds in `jest.config.js`
 - [ ] Performance targets met (P50 < 300ms cached, < 3s first-time)
 - [ ] No memory leaks in long-running tests
 - [ ] Golden tests ensure deterministic behavior
@@ -403,7 +405,7 @@ mcp-search inspect-db --url "https://example.com"
 
 ```bash
 npm run test:coverage
-# Should show >90% coverage
+# Should satisfy the configured coverage thresholds
 
 npm run test:integration
 # All integration tests pass
@@ -431,8 +433,8 @@ npm run test:performance
        "scripts": {
          "test:watch": "jest --watch",
          "test:debug": "node --inspect-brk jest",
-         "db:inspect": "mcp-search inspect-db",
-         "mcp:debug": "mcp-search debug-server",
+         "db:inspect": "node -r dotenv/config dist/cli.js inspect",
+         "mcp:debug": "node -r dotenv/config dist/cli.js server",
          "dev:with-inspector": "concurrently 'npm run build:watch' 'mcp-search server'"
        }
      }
@@ -469,7 +471,7 @@ npm run test:performance
 
 ```bash
 # Test NPM package installation
-npm install -g mcp-search
+npm install -g @dimitrk/mcp-search
 mcp-search --help
 
 # Test Docker deployment
@@ -521,7 +523,7 @@ docker run -p 3000:3000 mcp-search
 - Memory usage remains stable under load
 - Error rates < 1% under normal conditions
 - MCP debugging tools work seamlessly
-- Code coverage maintained >90%
+- Code coverage maintained at or above the thresholds in `jest.config.js`
 
 ---
 

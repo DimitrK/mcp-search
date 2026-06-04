@@ -128,7 +128,8 @@ jobs:
         run: npm run test:integration
         env:
           # Mock environment for tests
-          GOOGLE_API_KEY: test-key
+          SEARCH_PROVIDER: google
+          SEARCH_ENGINE_API_KEY: test-key
           GOOGLE_SEARCH_ENGINE_ID: test-engine
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
@@ -138,7 +139,8 @@ jobs:
         if: matrix.run-performance
         run: npm run test:performance
         env:
-          GOOGLE_API_KEY: test-key
+          SEARCH_PROVIDER: google
+          SEARCH_ENGINE_API_KEY: test-key
           GOOGLE_SEARCH_ENGINE_ID: test-engine
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
@@ -148,7 +150,8 @@ jobs:
         if: matrix.node-version == '20.x' && matrix.os == 'ubuntu-latest'
         run: npm run test:coverage
         env:
-          GOOGLE_API_KEY: test-key
+          SEARCH_PROVIDER: google
+          SEARCH_ENGINE_API_KEY: test-key
           GOOGLE_SEARCH_ENGINE_ID: test-engine
           EMBEDDING_SERVER_URL: http://localhost:3000
           EMBEDDING_SERVER_API_KEY: test-key
@@ -189,7 +192,8 @@ jobs:
       - name: 🔍 Test Docker image
         run: |
           docker run --rm \
-            -e GOOGLE_API_KEY=test \
+            -e SEARCH_PROVIDER=google \
+            -e SEARCH_ENGINE_API_KEY=test \
             -e GOOGLE_SEARCH_ENGINE_ID=test \
             -e EMBEDDING_SERVER_URL=http://test \
             -e EMBEDDING_SERVER_API_KEY=test \

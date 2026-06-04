@@ -2,14 +2,20 @@ import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import { handleWebSearch } from '../../../src/handlers/webSearch';
 import { handleReadFromPage } from '../../../src/handlers/readFromPage';
 import { createChildLogger } from '../../../src/utils/logger';
-import { GoogleClient } from '../../../src/core/search/googleClient';
+import { createSearchProviderFromEnvironment } from '../../../src/core/search/searchProviderFactory';
 import { GoogleSearchResultFullType } from '../../../src/mcp/schemas';
+import type {
+  SearchProvider,
+  SearchProviderResponse,
+  SearchProviderResult,
+} from '../../../src/core/search/searchProvider';
 
-jest.mock('../../../src/core/search/googleClient');
+jest.mock('../../../src/core/search/searchProviderFactory');
 jest.mock('../../../src/handlers/readFromPage');
 jest.mock('../../../src/config/environment', () => ({
   getEnvironment: jest.fn(() => ({
-    GOOGLE_API_KEY: 'test-key',
+    SEARCH_PROVIDER: 'google',
+    SEARCH_ENGINE_API_KEY: 'test-key',
     GOOGLE_SEARCH_ENGINE_ID: 'test-engine',
     EMBEDDING_SERVER_URL: 'http://test-server',
     EMBEDDING_SERVER_API_KEY: 'test-api-key',
@@ -22,16 +28,43 @@ jest.mock('../../../src/config/environment', () => ({
   getDatabasePath: jest.fn(() => '/tmp/test-data/db/mcp.duckdb'),
 }));
 
-const MockedGoogleClient = GoogleClient as jest.MockedClass<typeof GoogleClient>;
+const MockedCreateSearchProvider = createSearchProviderFromEnvironment as jest.MockedFunction<
+  typeof createSearchProviderFromEnvironment
+>;
 const MockedHandleReadFromPage = handleReadFromPage as jest.MockedFunction<
   typeof handleReadFromPage
 >;
 
+function mockProviderResponse(
+  query: string,
+  result: Record<string, unknown>
+): SearchProviderResponse {
+  return {
+    queries: [
+      {
+        query,
+        result: {
+          provider: 'google',
+          ...result,
+        } as SearchProviderResult,
+      },
+    ],
+  };
+}
+
 describe('Web Search Handler', () => {
   const mockLogger = createChildLogger('test');
+  let mockSearchProvider: jest.Mocked<SearchProvider>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockSearchProvider = {
+      name: 'google',
+      displayName: 'Google Custom Search',
+      search: jest.fn(),
+    };
+    MockedCreateSearchProvider.mockReturnValue(mockSearchProvider);
 
     // Default: handleReadFromPage returns empty results (no chunks found)
     MockedHandleReadFromPage.mockResolvedValue({
@@ -54,8 +87,9 @@ describe('Web Search Handler', () => {
     });
   });
 
-  test('should call GoogleClient and return formatted results for a single query', async () => {
+  test('should call configured search provider and return formatted results for a single query', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       kind: 'customsearch#search',
       items: [
         {
@@ -67,13 +101,13 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     const input = { query: 'test', resultsPerQuery: 7, minimal: false };
     const result = await handleWebSearch(input, mockLogger);
 
-    expect(MockedGoogleClient.prototype.search).toHaveBeenCalledWith('test', {
+    expect(mockSearchProvider.search).toHaveBeenCalledWith('test', {
       resultsPerQuery: 7,
     });
 
@@ -84,13 +118,41 @@ describe('Web Search Handler', () => {
   });
 
   test('should handle an array of queries', async () => {
-    const mockSearchResult = {
+    const mockSearchResult: SearchProviderResponse = {
       queries: [
-        { query: 'q1', result: { items: [{ title: 'R1', link: 'https://r1.com' }] } },
-        { query: 'q2', result: { items: [{ title: 'R2', link: 'https://r2.com' }] } },
+        {
+          query: 'q1',
+          result: {
+            provider: 'google',
+            items: [
+              {
+                title: 'R1',
+                link: 'https://r1.com',
+                displayLink: 'r1.com',
+                snippet: 'R1 snippet',
+                formattedUrl: 'https://r1.com',
+              },
+            ],
+          },
+        },
+        {
+          query: 'q2',
+          result: {
+            provider: 'google',
+            items: [
+              {
+                title: 'R2',
+                link: 'https://r2.com',
+                displayLink: 'r2.com',
+                snippet: 'R2 snippet',
+                formattedUrl: 'https://r2.com',
+              },
+            ],
+          },
+        },
       ],
     };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     const input = { query: ['q1', 'q2'], resultsPerQuery: 10, minimal: true };
     const result = await handleWebSearch(input, mockLogger);
@@ -101,8 +163,59 @@ describe('Web Search Handler', () => {
     expect(parsedResult.queries[1].query).toBe('q2');
   });
 
+  test('should preserve provider metadata in minimal mode', async () => {
+    mockSearchProvider = {
+      name: 'tavily',
+      displayName: 'Tavily Search',
+      search: jest.fn(),
+    };
+    MockedCreateSearchProvider.mockReturnValue(mockSearchProvider);
+
+    const mockSearchResult: SearchProviderResponse = {
+      queries: [
+        {
+          query: 'latest ai news',
+          result: {
+            provider: 'tavily',
+            answer: 'Concise answer',
+            responseTime: 1.67,
+            items: [
+              {
+                title: 'AI Update',
+                link: 'https://example.com/ai',
+                displayLink: 'example.com',
+                snippet: 'Latest AI update',
+                formattedUrl: 'https://example.com/ai',
+                score: 0.92,
+                favicon: 'https://example.com/favicon.ico',
+                raw: { providerSpecific: true },
+              },
+            ],
+            raw: { request_id: 'req-123' },
+          },
+        },
+      ],
+    };
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
+
+    const result = await handleWebSearch(
+      { query: 'latest ai news', resultsPerQuery: 5, minimal: true },
+      mockLogger
+    );
+
+    const parsedResult = JSON.parse(result.content[0].text);
+    const providerResult = parsedResult.queries[0].result;
+
+    expect(providerResult.provider).toBe('tavily');
+    expect(providerResult.answer).toBe('Concise answer');
+    expect(providerResult.responseTime).toBe(1.67);
+    expect(providerResult.items[0].score).toBe(0.92);
+    expect(providerResult.items[0].favicon).toBe('https://example.com/favicon.ico');
+  });
+
   test('should perform similarity search when enabled and Google results contain URLs', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -113,15 +226,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = {
-      queries: [
-        {
-          query: 'test query',
-          result: mockGoogleResult,
-        },
-      ],
-    };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to return chunks
     MockedHandleReadFromPage.mockResolvedValue({
@@ -176,6 +282,7 @@ describe('Web Search Handler', () => {
 
   test('should skip similarity search when embedding service fails to initialize', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -186,8 +293,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test query', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to fail gracefully (returns content without chunks)
     MockedHandleReadFromPage.mockResolvedValue({
@@ -222,6 +329,7 @@ describe('Web Search Handler', () => {
 
   test('should skip similarity search when explicitly disabled', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -232,8 +340,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test query', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     const input = { query: 'test query', resultsPerQuery: 5, enableSimilaritySearch: false };
     const result = await handleWebSearch(input, mockLogger);
@@ -247,6 +355,7 @@ describe('Web Search Handler', () => {
 
   test('should handle similarity search failures gracefully', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -257,8 +366,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test query', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to throw an error
     MockedHandleReadFromPage.mockRejectedValue(new Error('Network error'));
@@ -275,6 +384,7 @@ describe('Web Search Handler', () => {
 
   test('should filter results by similarity threshold', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -285,8 +395,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test query', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to return high-score chunks
     MockedHandleReadFromPage.mockResolvedValue({
@@ -331,8 +441,8 @@ describe('Web Search Handler', () => {
     await expect(handleWebSearch(invalidInput, mockLogger)).rejects.toThrow();
   });
 
-  test('should propagate errors from the GoogleClient', async () => {
-    MockedGoogleClient.prototype.search.mockRejectedValue(new Error('API rate limit exceeded'));
+  test('should propagate errors from the configured search provider', async () => {
+    mockSearchProvider.search.mockRejectedValue(new Error('API rate limit exceeded'));
 
     const input = { query: 'failing query', resultsPerQuery: 5 };
     await expect(handleWebSearch(input, mockLogger)).rejects.toThrow('API rate limit exceeded');
@@ -340,6 +450,7 @@ describe('Web Search Handler', () => {
 
   test('should crawl and index URLs not in database before similarity search', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -357,15 +468,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = {
-      queries: [
-        {
-          query: 'test query',
-          result: mockGoogleResult,
-        },
-      ],
-    };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to return chunks for both URLs
     MockedHandleReadFromPage.mockImplementation(async (args: unknown) => {
@@ -414,6 +518,7 @@ describe('Web Search Handler', () => {
 
   test('should return all relevant chunks above threshold (not limited to 3)', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/article',
@@ -424,8 +529,8 @@ describe('Web Search Handler', () => {
         },
       ],
     };
-    const mockSearchResult = { queries: [{ query: 'test query', result: mockGoogleResult }] };
-    MockedGoogleClient.prototype.search.mockResolvedValue(mockSearchResult);
+    const mockSearchResult = mockProviderResponse('test query', mockGoogleResult);
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
 
     // Mock readFromPage to return many relevant chunks (more than 3)
     // This simulates finding multiple relevant sections in a page

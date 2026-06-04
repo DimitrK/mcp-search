@@ -7,9 +7,8 @@ import { logger } from './utils/logger';
 import { closeGlobalPool, getPool } from './core/vector/store/pool';
 import { DatabaseInspector } from './utils/databaseInspector';
 import { DatabaseCleaner } from './utils/databaseCleaner';
-import { getEnvironment, getDataDirectory } from './config/environment';
+import { getEnvironment, getDataDirectory, getDatabasePath } from './config/environment';
 import { existsSync } from 'fs';
-import { join } from 'path';
 
 const HELP_TEXT = `
 ${APP_NAME} v${APP_VERSION}
@@ -331,8 +330,9 @@ async function main(): Promise<void> {
         getEnvironment(); // Validate environment variables
         console.log('  ✅ Environment variables validated');
         const dataDir = getDataDirectory();
+        const dbPath = getDatabasePath();
         console.log(`  📂 Data directory: ${dataDir}`);
-        const dbPath = join(dataDir, 'db', 'mpc.duckdb');
+        console.log(`  💾 Database path: ${dbPath}`);
         if (existsSync(dbPath)) {
           console.log('  ✅ Database file exists');
         } else {
