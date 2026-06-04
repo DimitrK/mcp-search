@@ -72,30 +72,38 @@ export const InPageMatchingReferences = z.object({
   relevantChunks: z.array(RelevantChunk).describe('Array of relevant content chunks from the page'),
 });
 
-// Search Result Schemas. The item shape is normalized across provider adapters.
-export const GoogleSearchItemMinimal = z.object({
-  title: z.string().describe('Title of the search result'),
-  link: z.string().url().describe('URL of the search result'),
-  displayLink: z.string().describe('Display domain of the search result'),
-  snippet: z.string().describe('Text snippet from the search result'),
-  formattedUrl: z.string().describe('Formatted URL of the search result'),
-  inPageMatchingReferences: InPageMatchingReferences.optional().describe(
-    'Semantic similarity search results from this page'
-  ),
-});
+const SearchProviderName = z.enum(['google', 'brave', 'duckduckgo', 'tavily']);
 
-export const GoogleSearchItemFull = GoogleSearchItemMinimal.extend({
+// Search Result Schemas. The item shape is normalized across provider adapters.
+export const SearchProviderItemMinimal = z
+  .object({
+    title: z.string().describe('Title of the search result'),
+    link: z.string().url().describe('URL of the search result'),
+    displayLink: z.string().describe('Display domain of the search result'),
+    snippet: z.string().describe('Text snippet from the search result'),
+    formattedUrl: z.string().describe('Formatted URL of the search result'),
+    inPageMatchingReferences: InPageMatchingReferences.optional().describe(
+      'Semantic similarity search results from this page'
+    ),
+  })
+  .passthrough();
+
+export const SearchProviderItemFull = SearchProviderItemMinimal.extend({
   kind: z.string().optional(),
   htmlTitle: z.string().optional(),
   htmlSnippet: z.string().optional(),
   pagemap: z.record(z.unknown()).optional(),
-});
+  raw: z.record(z.unknown()).optional(),
+}).passthrough();
 
-export const GoogleSearchResultMinimal = z.object({
-  items: z.array(GoogleSearchItemMinimal).optional(),
-});
+export const SearchProviderResultMinimal = z
+  .object({
+    provider: SearchProviderName.describe('Search provider that produced the result'),
+    items: z.array(SearchProviderItemMinimal).optional(),
+  })
+  .passthrough();
 
-export const GoogleSearchResultFull = z.object({
+export const SearchProviderResultFull = SearchProviderResultMinimal.extend({
   kind: z.string().optional(),
   url: z
     .object({
@@ -150,14 +158,20 @@ export const GoogleSearchResultFull = z.object({
       formattedTotalResults: z.string().optional(),
     })
     .optional(),
-  items: z.array(GoogleSearchItemFull).optional(),
-});
+  items: z.array(SearchProviderItemFull).optional(),
+  raw: z.unknown().optional(),
+}).passthrough();
+
+export const GoogleSearchItemMinimal = SearchProviderItemMinimal;
+export const GoogleSearchItemFull = SearchProviderItemFull;
+export const GoogleSearchResultMinimal = SearchProviderResultMinimal;
+export const GoogleSearchResultFull = SearchProviderResultFull;
 
 export const SearchResultWithSimilarity = z.object({
   query: z.string(),
   result: z
-    .union([GoogleSearchResultMinimal, GoogleSearchResultFull])
-    .describe('Search provider result with optional inPageMatchingReferences added to items'),
+    .union([SearchProviderResultMinimal, SearchProviderResultFull])
+    .describe('Normalized provider result with optional inPageMatchingReferences added to items'),
 });
 
 export const SearchOutput = z.object({
@@ -220,10 +234,14 @@ export const ReadFromPageOutput = z.object({
 export type SearchInputType = z.infer<typeof SearchInput>;
 export type SearchOutputType = z.infer<typeof SearchOutput>;
 export type SearchResultWithSimilarityType = z.infer<typeof SearchResultWithSimilarity>;
-export type GoogleSearchResultMinimalType = z.infer<typeof GoogleSearchResultMinimal>;
-export type GoogleSearchResultFullType = z.infer<typeof GoogleSearchResultFull>;
-export type GoogleSearchItemMinimalType = z.infer<typeof GoogleSearchItemMinimal>;
-export type GoogleSearchItemFullType = z.infer<typeof GoogleSearchItemFull>;
+export type SearchProviderResultMinimalType = z.infer<typeof SearchProviderResultMinimal>;
+export type SearchProviderResultFullType = z.infer<typeof SearchProviderResultFull>;
+export type SearchProviderItemMinimalType = z.infer<typeof SearchProviderItemMinimal>;
+export type SearchProviderItemFullType = z.infer<typeof SearchProviderItemFull>;
+export type GoogleSearchResultMinimalType = SearchProviderResultMinimalType;
+export type GoogleSearchResultFullType = SearchProviderResultFullType;
+export type GoogleSearchItemMinimalType = SearchProviderItemMinimalType;
+export type GoogleSearchItemFullType = SearchProviderItemFullType;
 export type InPageMatchingReferencesType = z.infer<typeof InPageMatchingReferences>;
 export type ReadFromPageInputType = z.infer<typeof ReadFromPageInput>;
 export type ReadFromPageOutputType = z.infer<typeof ReadFromPageOutput>;

@@ -89,6 +89,7 @@ describe('Web Search Handler', () => {
 
   test('should call configured search provider and return formatted results for a single query', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       kind: 'customsearch#search',
       items: [
         {
@@ -162,8 +163,59 @@ describe('Web Search Handler', () => {
     expect(parsedResult.queries[1].query).toBe('q2');
   });
 
+  test('should preserve provider metadata in minimal mode', async () => {
+    mockSearchProvider = {
+      name: 'tavily',
+      displayName: 'Tavily Search',
+      search: jest.fn(),
+    };
+    MockedCreateSearchProvider.mockReturnValue(mockSearchProvider);
+
+    const mockSearchResult: SearchProviderResponse = {
+      queries: [
+        {
+          query: 'latest ai news',
+          result: {
+            provider: 'tavily',
+            answer: 'Concise answer',
+            responseTime: 1.67,
+            items: [
+              {
+                title: 'AI Update',
+                link: 'https://example.com/ai',
+                displayLink: 'example.com',
+                snippet: 'Latest AI update',
+                formattedUrl: 'https://example.com/ai',
+                score: 0.92,
+                favicon: 'https://example.com/favicon.ico',
+                raw: { providerSpecific: true },
+              },
+            ],
+            raw: { request_id: 'req-123' },
+          },
+        },
+      ],
+    };
+    mockSearchProvider.search.mockResolvedValue(mockSearchResult);
+
+    const result = await handleWebSearch(
+      { query: 'latest ai news', resultsPerQuery: 5, minimal: true },
+      mockLogger
+    );
+
+    const parsedResult = JSON.parse(result.content[0].text);
+    const providerResult = parsedResult.queries[0].result;
+
+    expect(providerResult.provider).toBe('tavily');
+    expect(providerResult.answer).toBe('Concise answer');
+    expect(providerResult.responseTime).toBe(1.67);
+    expect(providerResult.items[0].score).toBe(0.92);
+    expect(providerResult.items[0].favicon).toBe('https://example.com/favicon.ico');
+  });
+
   test('should perform similarity search when enabled and Google results contain URLs', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -230,6 +282,7 @@ describe('Web Search Handler', () => {
 
   test('should skip similarity search when embedding service fails to initialize', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -276,6 +329,7 @@ describe('Web Search Handler', () => {
 
   test('should skip similarity search when explicitly disabled', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -301,6 +355,7 @@ describe('Web Search Handler', () => {
 
   test('should handle similarity search failures gracefully', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com',
@@ -329,6 +384,7 @@ describe('Web Search Handler', () => {
 
   test('should filter results by similarity threshold', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -394,6 +450,7 @@ describe('Web Search Handler', () => {
 
   test('should crawl and index URLs not in database before similarity search', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/page1',
@@ -461,6 +518,7 @@ describe('Web Search Handler', () => {
 
   test('should return all relevant chunks above threshold (not limited to 3)', async () => {
     const mockGoogleResult: GoogleSearchResultFullType = {
+      provider: 'google',
       items: [
         {
           link: 'https://example.com/article',

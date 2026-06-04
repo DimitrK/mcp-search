@@ -3,10 +3,9 @@ import {
   SearchInput,
   SearchOutputType,
   SearchResultWithSimilarityType,
-  GoogleSearchResultMinimalType,
-  GoogleSearchResultFullType,
-  GoogleSearchItemMinimalType,
-  InPageMatchingReferencesType,
+  SearchProviderResultMinimalType,
+  SearchProviderResultFullType,
+  SearchProviderItemMinimalType,
 } from '../mcp/schemas';
 import { getEnvironment } from '../config/environment';
 import { normalizeUrl } from '../utils/urlValidator';
@@ -95,7 +94,7 @@ export async function handleWebSearch(
 
   // Phase 2: Process each query result
   for (const queryResult of rawResult.queries) {
-    let enhancedProviderResult: GoogleSearchResultMinimalType | GoogleSearchResultFullType;
+    let enhancedProviderResult: SearchProviderResultMinimalType | SearchProviderResultFullType;
 
     // Phase 3: Fetch and search URLs if similarity search is enabled
     if (
@@ -239,12 +238,12 @@ export async function handleWebSearch(
       // Apply minimal filtering
       enhancedProviderResult = input.minimal
         ? minimizeProviderResult(googleResult)
-        : (googleResult as GoogleSearchResultFullType);
+        : (googleResult as SearchProviderResultFullType);
     } else {
       // No embedding service or invalid result, just apply minimal filtering
       enhancedProviderResult = input.minimal
         ? minimizeProviderResult(queryResult.result as Record<string, unknown>)
-        : (queryResult.result as GoogleSearchResultFullType);
+        : (queryResult.result as SearchProviderResultFullType);
     }
 
     const enhancedResult: SearchResultWithSimilarityType = {
@@ -283,24 +282,33 @@ export async function handleWebSearch(
   };
 }
 
-function minimizeProviderResult(result: Record<string, unknown>): GoogleSearchResultMinimalType {
-  const minimized: GoogleSearchResultMinimalType = {};
+function minimizeProviderResult(result: Record<string, unknown>): SearchProviderResultMinimalType {
+  const { items, raw: _raw, provider, ...resultMetadata } = result;
+  const minimized: SearchProviderResultMinimalType = {
+    ...(resultMetadata as Record<string, unknown>),
+    provider: provider as SearchProviderResultMinimalType['provider'],
+  };
 
-  if (Array.isArray(result.items)) {
-    minimized.items = (result.items as Array<Record<string, unknown>>).map(item => {
-      const minimalItem: GoogleSearchItemMinimalType = {
-        title: item.title as string,
-        link: item.link as string,
-        displayLink: item.displayLink as string,
-        snippet: item.snippet as string,
-        formattedUrl: item.formattedUrl as string,
+  if (Array.isArray(items)) {
+    minimized.items = items.map(item => {
+      const {
+        title,
+        link,
+        displayLink,
+        snippet,
+        formattedUrl,
+        raw: _itemRaw,
+        ...itemMetadata
+      } = item as Record<string, unknown>;
+
+      const minimalItem: SearchProviderItemMinimalType = {
+        ...(itemMetadata as Record<string, unknown>),
+        title: title as string,
+        link: link as string,
+        displayLink: displayLink as string,
+        snippet: snippet as string,
+        formattedUrl: formattedUrl as string,
       };
-
-      // Include inPageMatchingReferences if present
-      if (item.inPageMatchingReferences) {
-        minimalItem.inPageMatchingReferences =
-          item.inPageMatchingReferences as InPageMatchingReferencesType;
-      }
 
       return minimalItem;
     });
