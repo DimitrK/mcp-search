@@ -16,6 +16,10 @@ describe('TavilySearchProvider', () => {
     mockedRequest.mockReset();
   });
 
+  test('requires an API key', () => {
+    expect(() => new TavilySearchProvider('', 2)).toThrow('Tavily Search API key is required');
+  });
+
   test('maps Tavily results into canonical search items', async () => {
     mockedRequest.mockResolvedValue({
       statusCode: 200,
@@ -97,6 +101,44 @@ describe('TavilySearchProvider', () => {
         },
       ],
     });
+  });
+
+  test('filters incomplete Tavily results and uses safe fallback fields', async () => {
+    mockedRequest.mockResolvedValue({
+      statusCode: 200,
+      body: {
+        json: () =>
+          Promise.resolve({
+            results: [
+              {
+                title: 'Complete Result',
+                url: 'https://fallback.example.com/result',
+              },
+              {
+                title: 'Missing URL',
+                content: 'Ignored because URL is required',
+              },
+              {
+                url: 'https://example.com/missing-title',
+                content: 'Ignored because title is required',
+              },
+            ],
+          }),
+      },
+    });
+
+    const provider = new TavilySearchProvider('tavily-key', 2);
+    const result = await provider.search('fallbacks');
+
+    expect(result.queries[0].result.items).toEqual([
+      expect.objectContaining({
+        title: 'Complete Result',
+        link: 'https://fallback.example.com/result',
+        displayLink: 'fallback.example.com',
+        snippet: '',
+        formattedUrl: 'https://fallback.example.com/result',
+      }),
+    ]);
   });
 
   test('passes expanded Tavily search depth values through to the API', async () => {

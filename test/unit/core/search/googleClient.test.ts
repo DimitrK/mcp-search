@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterEach, jest } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { request } from 'undici';
 import { GoogleClient } from '../../../../src/core/search/googleClient';
 import { getEnvironment } from '../../../../src/config/environment';
@@ -16,12 +16,21 @@ describe('GoogleClient', () => {
   const { SEARCH_ENGINE_API_KEY, GOOGLE_SEARCH_ENGINE_ID } = getEnvironment();
   let googleClient: GoogleClient;
 
-  beforeAll(() => {
+  beforeEach(() => {
     googleClient = new GoogleClient(SEARCH_ENGINE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!);
   });
 
   afterEach(() => {
     mockedRequest.mockClear();
+  });
+
+  test('requires API credentials', () => {
+    expect(() => new GoogleClient('', GOOGLE_SEARCH_ENGINE_ID!)).toThrow(
+      'Google API key is required'
+    );
+    expect(() => new GoogleClient(SEARCH_ENGINE_API_KEY!, '')).toThrow(
+      'Google Search Engine ID is required'
+    );
   });
 
   test('should return a successful search result for a single query', async () => {
@@ -59,6 +68,42 @@ describe('GoogleClient', () => {
     );
   });
 
+  test('should normalize incomplete Google items safely', async () => {
+    const mockResponse = {
+      items: [
+        {
+          title: 'Fallback Result',
+          link: 'https://fallback.example.com/result',
+        },
+        {
+          title: 'Missing Link',
+        },
+        {
+          link: 'https://example.com/missing-title',
+        },
+      ],
+    };
+
+    mockedRequest.mockResolvedValue({
+      statusCode: 200,
+      body: {
+        json: () => Promise.resolve(mockResponse),
+      },
+    });
+
+    const result = await googleClient.search('fallback query');
+
+    expect(result.queries[0].result.items).toEqual([
+      expect.objectContaining({
+        title: 'Fallback Result',
+        link: 'https://fallback.example.com/result',
+        displayLink: 'fallback.example.com',
+        snippet: '',
+        formattedUrl: 'https://fallback.example.com/result',
+      }),
+    ]);
+  });
+
   test('should map timeRange to Google dateRestrict and cap result count', async () => {
     mockedRequest.mockResolvedValue({
       statusCode: 200,
@@ -72,6 +117,59 @@ describe('GoogleClient', () => {
     const requestUrl = new URL(mockedRequest.mock.calls[0][0] as string);
     expect(requestUrl.searchParams.get('dateRestrict')).toBe('w1');
     expect(requestUrl.searchParams.get('num')).toBe('10');
+  });
+
+  test.each<['day' | 'month' | 'year', 'd1' | 'm1' | 'y1']>([
+    ['day', 'd1'],
+    ['month', 'm1'],
+    ['year', 'y1'],
+  ])('should map %s timeRange to Google dateRestrict', async (timeRange, expected) => {
+    mockedRequest.mockResolvedValue({
+      statusCode: 200,
+      body: {
+        json: () => Promise.resolve({ items: [] }),
+      },
+    });
+
+    await googleClient.search('recent query', { timeRange });
+
+    const requestUrl = new URL(mockedRequest.mock.calls[0][0] as string);
+    expect(requestUrl.searchParams.get('dateRestrict')).toBe(expected);
+  });
+
+  test('should retry once after a network error and succeed', async () => {
+    const query = 'network retry';
+    const mockResponseSuccess = {
+      items: [
+        {
+          title: 'Recovered',
+          link: 'https://example.com/recovered',
+          displayLink: 'example.com',
+          snippet: 'Recovered snippet',
+          formattedUrl: 'https://example.com/recovered',
+        },
+      ],
+    };
+
+    mockedRequest.mockRejectedValueOnce(new Error('ECONNRESET')).mockResolvedValueOnce({
+      statusCode: 200,
+      body: { json: () => Promise.resolve(mockResponseSuccess) },
+    });
+
+    const result = await googleClient.search(query);
+
+    expect(result.queries[0].result).toMatchObject({
+      provider: 'google',
+      items: [expect.objectContaining({ title: 'Recovered' })],
+    });
+    expect(mockedRequest).toHaveBeenCalledTimes(2);
+  });
+
+  test('should throw when all network attempts fail', async () => {
+    mockedRequest.mockRejectedValue(new Error('socket hang up'));
+
+    await expect(googleClient.search('network failure')).rejects.toThrow('socket hang up');
+    expect(mockedRequest).toHaveBeenCalledTimes(2);
   });
 
   test('should handle multiple queries in parallel', async () => {

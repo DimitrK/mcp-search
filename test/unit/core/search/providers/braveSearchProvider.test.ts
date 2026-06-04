@@ -16,6 +16,10 @@ describe('BraveSearchProvider', () => {
     mockedRequest.mockReset();
   });
 
+  test('requires an API key', () => {
+    expect(() => new BraveSearchProvider('', 2)).toThrow('Brave Search API key is required');
+  });
+
   test('maps Brave web and news results into canonical search items', async () => {
     mockedRequest.mockResolvedValue({
       statusCode: 200,
@@ -83,6 +87,47 @@ describe('BraveSearchProvider', () => {
     });
   });
 
+  test('filters incomplete results and falls back to URL-derived display values', async () => {
+    mockedRequest.mockResolvedValue({
+      statusCode: 200,
+      body: {
+        json: () =>
+          Promise.resolve({
+            web: {
+              results: [
+                {
+                  title: 'Complete Result',
+                  url: 'https://fallback.example.com/page',
+                  page_age: '1 day ago',
+                },
+                {
+                  title: 'Missing URL',
+                  description: 'Ignored because URL is required',
+                },
+                {
+                  url: 'https://example.com/missing-title',
+                  description: 'Ignored because title is required',
+                },
+              ],
+            },
+          }),
+      },
+    });
+
+    const provider = new BraveSearchProvider('brave-key', 2);
+    const result = await provider.search('fallbacks');
+
+    expect(result.queries[0].result.items).toEqual([
+      expect.objectContaining({
+        title: 'Complete Result',
+        link: 'https://fallback.example.com/page',
+        displayLink: 'fallback.example.com',
+        snippet: '',
+        age: '1 day ago',
+      }),
+    ]);
+  });
+
   test('maps supported provider hints to Brave query parameters', async () => {
     mockedRequest.mockResolvedValue({
       statusCode: 200,
@@ -104,6 +149,25 @@ describe('BraveSearchProvider', () => {
     expect(requestUrl.searchParams.get('freshness')).toBe('pm');
     expect(requestUrl.searchParams.get('result_filter')).toBe('news');
     expect(requestUrl.searchParams.has('search_depth')).toBe(false);
+  });
+
+  test.each<['day' | 'week' | 'year', 'pd' | 'pw' | 'py']>([
+    ['day', 'pd'],
+    ['week', 'pw'],
+    ['year', 'py'],
+  ])('maps %s freshness hints', async (timeRange, expectedFreshness) => {
+    mockedRequest.mockResolvedValue({
+      statusCode: 200,
+      body: {
+        json: () => Promise.resolve({ web: { results: [] } }),
+      },
+    });
+
+    const provider = new BraveSearchProvider('brave-key', 2);
+    await provider.search('fresh query', { timeRange });
+
+    const requestUrl = new URL(mockedRequest.mock.calls[0][0] as string);
+    expect(requestUrl.searchParams.get('freshness')).toBe(expectedFreshness);
   });
 
   test('throws for non-success responses', async () => {
