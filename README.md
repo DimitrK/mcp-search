@@ -32,7 +32,8 @@ Follow this guide to create your Google Search API credentials: [Programmable Se
 #### Install Playwright (optional - enables crawling SPAs)
 
 ```bash
-# Additionally install Playwright with chromium browser. This is a peer dependency that allows the mcp to crawl SPAs
+# Additionally install Playwright with chromium browser. This is an optional peer dependency that allows the mcp to crawl SPAs
+npm install --no-save playwright@1.55.1
 npx playwright@1.55.1 install --with-deps chromium
 ```
 

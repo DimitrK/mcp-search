@@ -77,7 +77,8 @@ async function loadPlaywright(): Promise<SpaPlaywright> {
 
 function rejectAfter(timeoutMs: number, message: string): Promise<never> {
   return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(message)), timeoutMs);
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timer.unref?.();
   });
 }
 

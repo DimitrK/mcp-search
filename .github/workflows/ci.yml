@@ -116,7 +116,9 @@ jobs:
         run: npm ci
 
       - name: 🎭 Install Playwright (Linux/macOS only)
-        run: npx playwright@1.55.1 install --with-deps chromium
+        run: |
+          npm install --no-save playwright@1.55.1
+          npx playwright@1.55.1 install --with-deps chromium
 
       - name: 🏗️ Build project
         run: npm run build
