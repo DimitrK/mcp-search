@@ -29,6 +29,58 @@ const TIMEOUTS = {
 
 const PLAYWRIGHT_PACKAGE_NAME: string = 'playwright';
 
+interface SpaPlaywright {
+  chromium: {
+    launch(options: Record<string, unknown>): Promise<SpaBrowser>;
+  };
+}
+
+interface SpaBrowser {
+  newContext(options: Record<string, unknown>): Promise<SpaBrowserContext>;
+  close(): Promise<void>;
+}
+
+interface SpaBrowserContext {
+  newPage(): Promise<SpaPage>;
+  close(): Promise<void>;
+}
+
+interface SpaPage {
+  setContent(
+    html: string,
+    options: { waitUntil: 'domcontentloaded'; timeout: number }
+  ): Promise<void>;
+  waitForFunction(pageFunction: () => boolean, options: { timeout: number }): Promise<void>;
+  waitForTimeout(timeout: number): Promise<void>;
+  evaluate<TArgument, TResult>(
+    pageFunction: (argument: TArgument) => TResult | Promise<TResult>,
+    argument: TArgument
+  ): Promise<TResult>;
+  goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
+}
+
+function getPlaywrightPackageName(): string {
+  return PLAYWRIGHT_PACKAGE_NAME;
+}
+
+async function loadPlaywright(): Promise<SpaPlaywright> {
+  const playwrightModule = (await import(getPlaywrightPackageName())) as
+    | SpaPlaywright
+    | { default?: SpaPlaywright };
+
+  if ('default' in playwrightModule && playwrightModule.default) {
+    return playwrightModule.default;
+  }
+
+  return playwrightModule as SpaPlaywright;
+}
+
+function rejectAfter(timeoutMs: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+}
+
 export async function extractWithSpa(
   html: string,
   options: ExtractorOptions
@@ -36,15 +88,13 @@ export async function extractWithSpa(
   const logger = createChildLogger(options.correlationId || 'unknown');
 
   return withTiming(logger, 'spa_extraction', async () => {
-    let browser: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    let context: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let browser: SpaBrowser | undefined;
+    let context: SpaBrowserContext | undefined;
     try {
       // Check if Playwright is available
-      let playwright: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      let playwright: SpaPlaywright;
       try {
-        // Use dynamic import for ESM compatibility
-        const playwrightModule = await import(PLAYWRIGHT_PACKAGE_NAME);
-        playwright = playwrightModule.default || playwrightModule;
+        playwright = await loadPlaywright();
       } catch (error) {
         logger.error(
           {
@@ -87,12 +137,7 @@ export async function extractWithSpa(
             '--disable-background-networking',
           ],
         }),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Browser launch timeout')),
-            TIMEOUTS.BROWSER_LAUNCH_RACE
-          )
-        ),
+        rejectAfter(TIMEOUTS.BROWSER_LAUNCH_RACE, 'Browser launch timeout'),
       ]);
 
       context = await Promise.race([
@@ -103,9 +148,7 @@ export async function extractWithSpa(
           viewport: { width: 1280, height: 720 },
           ignoreHTTPSErrors: true,
         }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Context creation timeout')), TIMEOUTS.CONTEXT_CREATION)
-        ),
+        rejectAfter(TIMEOUTS.CONTEXT_CREATION, 'Context creation timeout'),
       ]);
 
       const page = await context.newPage();
@@ -122,9 +165,7 @@ export async function extractWithSpa(
             waitUntil: 'domcontentloaded',
             timeout: TIMEOUTS.SET_CONTENT,
           }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('setContent timeout')), TIMEOUTS.SET_CONTENT_RACE)
-          ),
+          rejectAfter(TIMEOUTS.SET_CONTENT_RACE, 'setContent timeout'),
         ]);
 
         // Wait for dynamic content with shorter timeout
@@ -146,11 +187,9 @@ export async function extractWithSpa(
                 const content = appElement.textContent?.trim() || '';
                 return content.length > 50;
               },
-              { timeout: 2000 }
+              { timeout: TIMEOUTS.WAIT_FOR_FUNCTION }
             ),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('waitForFunction timeout')), 3000)
-            ),
+            rejectAfter(TIMEOUTS.WAIT_FOR_FUNCTION_RACE, 'waitForFunction timeout'),
           ]);
 
           logger.debug({ event: 'spa_content_ready' }, 'Dynamic content detected');
@@ -165,7 +204,7 @@ export async function extractWithSpa(
         }
 
         // Short wait for remaining operations
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(TIMEOUTS.SMALL_WAIT);
 
         logger.debug({ event: 'spa_content_extraction' }, 'Extracting content from rendered page');
 
@@ -306,15 +345,13 @@ export async function extractWithSpa(
             await Promise.race([
               page.goto(options.url, {
                 waitUntil: 'domcontentloaded',
-                timeout: 8000,
+                timeout: TIMEOUTS.URL_NAVIGATION,
               }),
-              new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('goto timeout')), 10000)
-              ),
+              rejectAfter(TIMEOUTS.URL_NAVIGATION_RACE, 'goto timeout'),
             ]);
 
             // Wait briefly for any dynamic content
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(TIMEOUTS.URL_WAIT);
 
             // Re-extract content after navigation
             const urlExtractedData = await page.evaluate(
@@ -516,8 +553,12 @@ export async function extractWithSpa(
         logger.debug({ event: 'spa_browser_cleanup' }, 'Cleaning up browser resources');
         try {
           // Clean up browser resources sequentially - context first, then browser
-          await context.close();
-          await browser.close();
+          if (context) {
+            await context.close();
+          }
+          if (browser) {
+            await browser.close();
+          }
         } catch (cleanupError) {
           logger.warn(
             {
@@ -528,7 +569,7 @@ export async function extractWithSpa(
           );
           // Force close if possible
           try {
-            browser.close();
+            await browser?.close();
           } catch {
             // Ignore final cleanup errors
           }
