@@ -293,6 +293,7 @@ async function waitForInflightOperations(): Promise<void> {
         resolve();
       }
     }, 100);
+    checkInterval.unref();
     // No timeout needed - operations will complete naturally
     // If they don't, that's a different bug to investigate
   });

@@ -1,3 +1,10 @@
+const nodeBabelTransform = [
+  'babel-jest',
+  {
+    presets: [['@babel/preset-env', { targets: { node: 'current' }, modules: 'commonjs' }]],
+  },
+];
+
 export default {
   preset: 'ts-jest',
   extensionsToTreatAsEsm: ['.ts'],
@@ -12,15 +19,10 @@ export default {
         tsconfig: 'tsconfig.json',
       },
     ],
-    '^.+\\.js$': [
-      'ts-jest',
-      {
-        useESM: true,
-        tsconfig: 'tsconfig.json',
-      },
-    ],
+    '^.+\\.js$': nodeBabelTransform,
+    '^.+\\.mjs$': nodeBabelTransform,
   },
-  transformIgnorePatterns: ['node_modules/(?!((@duckdb)/.*)\\.js$)'],
+  transformIgnorePatterns: ['node_modules/(?!((@duckdb)/.*\\.js$|@csstools/.*\\.mjs$))'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

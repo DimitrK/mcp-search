@@ -1,5 +1,12 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, jest } from '@jest/globals';
+import { existsSync } from 'fs';
 import { extractWithSpa } from '../../../../../src/core/content/extractors/spaExtractor';
+
+type PlaywrightModule = {
+  chromium: {
+    executablePath(): string;
+  };
+};
 
 // Mock HTML content that would be rendered by JavaScript
 const jsGeneratedContent = `
@@ -77,19 +84,34 @@ const emptySpaHtml = `
 `;
 
 describe('SpaExtractor', () => {
-  // Skip all tests if Playwright is not available
-  const playwrightAvailable = (() => {
+  const runBrowserTests = process.env.MCP_SEARCH_RUN_BROWSER_TESTS === 'true';
+
+  // Browser-backed tests are opt-in so local browser caches do not make the suite flaky.
+  const playwrightStatus = (() => {
+    if (!runBrowserTests) {
+      return {
+        packageAvailable: false,
+        browserAvailable: false,
+      };
+    }
+
     try {
-      require('playwright');
-      return true;
+      const playwright = jest.requireActual<PlaywrightModule>('playwright');
+      return {
+        packageAvailable: true,
+        browserAvailable: existsSync(playwright.chromium.executablePath()),
+      };
     } catch {
-      return false;
+      return {
+        packageAvailable: false,
+        browserAvailable: false,
+      };
     }
   })();
 
-  const skipIfNoPlaywright = playwrightAvailable ? test : test.skip;
+  const browserTest = runBrowserTests ? test : test.skip;
 
-  skipIfNoPlaywright(
+  browserTest(
     'extracts JavaScript-rendered content successfully',
     async () => {
       const result = await extractWithSpa(jsGeneratedContent, {
@@ -121,7 +143,7 @@ describe('SpaExtractor', () => {
     30000
   ); // Longer timeout for browser operations
 
-  skipIfNoPlaywright(
+  browserTest(
     'throws error for insufficient content after JS errors',
     async () => {
       // This test expects an error because the content is insufficient (<500 chars)
@@ -134,7 +156,7 @@ describe('SpaExtractor', () => {
     30000
   );
 
-  skipIfNoPlaywright(
+  browserTest(
     'throws error for empty SPA content',
     async () => {
       // This test expects an error because there's no meaningful content
@@ -147,7 +169,7 @@ describe('SpaExtractor', () => {
     30000
   );
 
-  skipIfNoPlaywright(
+  browserTest(
     'throws error for insufficient delayed content',
     async () => {
       const delayedContentHtml = `
@@ -174,7 +196,7 @@ describe('SpaExtractor', () => {
     30000
   );
 
-  skipIfNoPlaywright(
+  browserTest(
     'throws error after filtering removes too much content',
     async () => {
       const multimediaSpaHtml = `
@@ -214,7 +236,7 @@ describe('SpaExtractor', () => {
     30000
   );
 
-  skipIfNoPlaywright(
+  browserTest(
     'returns correlation ID when provided',
     async () => {
       const result = await extractWithSpa(jsGeneratedContent, {
@@ -228,7 +250,7 @@ describe('SpaExtractor', () => {
     30000
   );
 
-  skipIfNoPlaywright(
+  browserTest(
     'throws error when content is insufficient (<500 chars)',
     async () => {
       const insufficientContentHtml = `
@@ -256,8 +278,7 @@ describe('SpaExtractor', () => {
 
   // Test that always runs - handles both scenarios
   test('throws error when Playwright is not available', async () => {
-    if (playwrightAvailable) {
-      // If Playwright IS available, extraction should work
+    if (runBrowserTests) {
       const result = await extractWithSpa(jsGeneratedContent, {
         url: 'https://example.com/available-test',
       });
@@ -265,19 +286,30 @@ describe('SpaExtractor', () => {
       expect(result).toBeDefined();
       expect(result.extractionMethod).toBe('browser');
     } else {
-      // If Playwright is NOT available, should throw descriptive error
-      await expect(
-        extractWithSpa(jsGeneratedContent, {
-          url: 'https://example.com/unavailable-test',
-        })
-      ).rejects.toThrow('Playwright is required for SPA content extraction');
+      const previousBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+      process.env.PLAYWRIGHT_BROWSERS_PATH = '/tmp/mcp-search-missing-playwright-browsers';
+
+      try {
+        await expect(
+          extractWithSpa(jsGeneratedContent, {
+            url: 'https://example.com/unavailable-test',
+          })
+        ).rejects.toThrow(/Playwright is required|Executable doesn't exist|playwright install/i);
+      } finally {
+        if (previousBrowsersPath === undefined) {
+          delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+        } else {
+          process.env.PLAYWRIGHT_BROWSERS_PATH = previousBrowsersPath;
+        }
+      }
     }
   });
 
-  if (!playwrightAvailable) {
+  if (runBrowserTests && !playwrightStatus.browserAvailable) {
     console.warn(
-      '⚠️  Playwright not installed. SPA extractor tests will be skipped. Install with: npm install playwright'
+      playwrightStatus.packageAvailable
+        ? '⚠️  Playwright browser tests are enabled, but the browser is not installed. Install with: npx playwright@1.60.0 install chromium'
+        : '⚠️  Playwright browser tests are enabled, but Playwright is not installed. Install with: npm install playwright'
     );
   }
 });
-

@@ -37,6 +37,7 @@ describe('Environment Configuration', () => {
   });
 
   test('should throw error for missing required variables', () => {
+    process.env.SEARCH_PROVIDER = 'google';
     delete process.env.SEARCH_ENGINE_API_KEY;
 
     expect(() => getEnvironment()).toThrow('Environment validation failed');
