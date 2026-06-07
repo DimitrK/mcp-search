@@ -20,6 +20,7 @@ function withTimeout<T>(p: Promise<T>, timeoutMs: number, log: typeof logger = l
       log.warn({ timeoutMs }, 'Worker operation timeout');
       reject(new Error('Worker operation timeout'));
     }, timeoutMs);
+    timer.unref();
     p.then(v => {
       clearTimeout(timer);
       resolve(v);

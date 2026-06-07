@@ -75,11 +75,24 @@ async function loadPlaywright(): Promise<SpaPlaywright> {
   return playwrightModule as SpaPlaywright;
 }
 
-function rejectAfter(timeoutMs: number, message: string): Promise<never> {
-  return new Promise((_, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-    timer.unref?.();
-  });
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      timer.unref?.();
+      operation.then(resolve, reject);
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }
 
 export async function extractWithSpa(
@@ -121,7 +134,7 @@ export async function extractWithSpa(
       );
 
       // Launch browser with aggressive timeouts and performance optimizations
-      browser = await Promise.race([
+      browser = await withTimeout(
         playwright.chromium.launch({
           headless: true,
           timeout: TIMEOUTS.BROWSER_LAUNCH,
@@ -138,10 +151,11 @@ export async function extractWithSpa(
             '--disable-background-networking',
           ],
         }),
-        rejectAfter(TIMEOUTS.BROWSER_LAUNCH_RACE, 'Browser launch timeout'),
-      ]);
+        TIMEOUTS.BROWSER_LAUNCH_RACE,
+        'Browser launch timeout'
+      );
 
-      context = await Promise.race([
+      context = await withTimeout(
         browser.newContext({
           userAgent:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -149,8 +163,9 @@ export async function extractWithSpa(
           viewport: { width: 1280, height: 720 },
           ignoreHTTPSErrors: true,
         }),
-        rejectAfter(TIMEOUTS.CONTEXT_CREATION, 'Context creation timeout'),
-      ]);
+        TIMEOUTS.CONTEXT_CREATION,
+        'Context creation timeout'
+      );
 
       const page = await context.newPage();
 
@@ -161,22 +176,22 @@ export async function extractWithSpa(
         );
 
         // Set the HTML content with aggressive timeout
-        await Promise.race([
+        await withTimeout(
           page.setContent(html, {
             waitUntil: 'domcontentloaded',
             timeout: TIMEOUTS.SET_CONTENT,
           }),
-          rejectAfter(TIMEOUTS.SET_CONTENT_RACE, 'setContent timeout'),
-        ]);
+          TIMEOUTS.SET_CONTENT_RACE,
+          'setContent timeout'
+        );
 
         // Wait for dynamic content with shorter timeout
         logger.debug({ event: 'spa_wait_content' }, 'Waiting for dynamic content to render');
 
         try {
-          await Promise.race([
+          await withTimeout(
             page.waitForFunction(
               () => {
-                // REVIEW: The resolution of appElement seems poor.
                 const appElement =
                   document.querySelector('#app') ||
                   document.querySelector('#root') ||
@@ -190,8 +205,9 @@ export async function extractWithSpa(
               },
               { timeout: TIMEOUTS.WAIT_FOR_FUNCTION }
             ),
-            rejectAfter(TIMEOUTS.WAIT_FOR_FUNCTION_RACE, 'waitForFunction timeout'),
-          ]);
+            TIMEOUTS.WAIT_FOR_FUNCTION_RACE,
+            'waitForFunction timeout'
+          );
 
           logger.debug({ event: 'spa_content_ready' }, 'Dynamic content detected');
         } catch (error) {
@@ -260,7 +276,6 @@ export async function extractWithSpa(
             );
 
             // Add SPA-specific selectors
-            // REVIEW: The resolution of appElement seems poor.
             const spaSpecificSelectors = ['#app', '#root', '[data-reactroot]', '.app'];
             const allContentSelectors = [...contentSelectors, ...spaSpecificSelectors];
 
@@ -343,13 +358,14 @@ export async function extractWithSpa(
 
           // Try navigating to the actual URL as fallback
           try {
-            await Promise.race([
+            await withTimeout(
               page.goto(options.url, {
                 waitUntil: 'domcontentloaded',
                 timeout: TIMEOUTS.URL_NAVIGATION,
               }),
-              rejectAfter(TIMEOUTS.URL_NAVIGATION_RACE, 'goto timeout'),
-            ]);
+              TIMEOUTS.URL_NAVIGATION_RACE,
+              'goto timeout'
+            );
 
             // Wait briefly for any dynamic content
             await page.waitForTimeout(TIMEOUTS.URL_WAIT);
