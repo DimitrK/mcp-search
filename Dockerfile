@@ -1,5 +1,5 @@
 # Multi-stage build for optimized production image
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -16,8 +16,8 @@ COPY package*.json ./
 COPY tsconfig.json ./
 COPY build.mjs ./
 
-# Install ALL dependencies (including devDependencies needed for build)
-RUN npm ci
+# Install all dependencies, including optional platform bindings needed by native packages.
+RUN npm ci --include=optional
 
 # Copy source code
 COPY src ./src
@@ -26,7 +26,7 @@ COPY src ./src
 RUN npm run build
 
 # Production stage
-FROM node:22-slim AS production
+FROM node:24-slim AS production
 
 # Install runtime dependencies (dumb-init for signal handling)
 RUN apt-get update && apt-get install -y \
@@ -37,23 +37,26 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies (include optional for platform-specific binaries)
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Install Playwright and browser dependencies for SPA extraction
-RUN npx playwright@1.55.1 install --with-deps chromium
-
-# Ensure Playwright cache directory is writable by mcp-search user
-RUN mkdir -p /home/mcp-search/.cache && chown -R mcp-search:nodejs /home/mcp-search/.cache
+# Install production dependencies plus Playwright for SPA extraction in the Docker image.
+# Playwright remains optional for npm consumers, but the container should be self-contained.
+# Install Playwright in a temp prefix because the root devDependency is omitted in production.
+RUN npm ci --omit=dev --include=optional \
+    && npm install --prefix /tmp/playwright --ignore-scripts playwright@1.60.0 \
+    && cp -R /tmp/playwright/node_modules/playwright /tmp/playwright/node_modules/playwright-core ./node_modules/ \
+    && node ./node_modules/playwright/cli.js install --with-deps chromium \
+    && rm -rf /tmp/playwright \
+    && npm cache clean --force
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create data directory with proper permissions
-RUN mkdir -p /app/data && chown -R mcp-search:nodejs /app
+# Create data and browser cache directories with proper permissions
+RUN mkdir -p /app/data /ms-playwright && chown -R mcp-search:nodejs /app /ms-playwright
 
 # Switch to non-root user
 USER mcp-search

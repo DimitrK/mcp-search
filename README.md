@@ -2,8 +2,8 @@
 
 [![CI/CD Pipeline](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml/badge.svg)](https://github.com/DimitrK/mcp-search/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/DimitrK/mcp-search/branch/master/graph/badge.svg)](https://codecov.io/gh/dimitrK/mcp-search)
-[![npm version](https://badge.fury.io/js/mcp-search.svg)](https://badge.fury.io/js/mcp-search)
-[![Docker Pulls](https://img.shields.io/docker/pulls/DimitrK/mcp-search)](https://hub.docker.com/r/dimitrisk/mcp-search)
+[![npm version](https://badge.fury.io/js/%40dimitrk%2Fmcp-search.svg)](https://badge.fury.io/js/%40dimitrk%2Fmcp-search)
+[![Docker Pulls](https://img.shields.io/docker/pulls/dimitrisk/mcp-search)](https://hub.docker.com/r/dimitrisk/mcp-search)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A **production-ready** Model Context Protocol (MCP) server for web search and semantic page content retrieval with local vector caching. Built for AI agents that need reliable, fast, and contextually relevant web information.
@@ -31,10 +31,24 @@ Follow this guide to create your Google Search API credentials: [Programmable Se
 
 #### Install Playwright (optional - enables crawling SPAs)
 
+The default `npx @dimitrk/mcp-search` setup runs without Playwright. To enable browser-backed SPA extraction in an npm-based MCP config, install the Chromium browser once and include Playwright in the same `npx` execution environment as the MCP package:
+
 ```bash
-# Additionally install Playwright with chromium browser. This is an optional peer dependency that allows the mcp to crawl SPAs
-npm install --no-save playwright@1.55.1
-npx playwright@1.55.1 install --with-deps chromium
+npx playwright@1.60.0 install --with-deps chromium
+```
+
+```json
+{
+  "command": "npx",
+  "args": [
+    "-y",
+    "--package",
+    "@dimitrk/mcp-search",
+    "--package",
+    "playwright@1.60.0",
+    "mcp-search"
+  ]
+}
 ```
 
 #### Install the MCP
@@ -61,7 +75,7 @@ npx playwright@1.55.1 install --with-deps chromium
 
 ### Installing MCP through Docker
 
-[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIlNFQVJDSF9QUk9WSURFUiIsIi1lIiwiU0VBUkNIX0VOR0lORV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJtY3Atc2VhcmNoOnRlc3QiXSwiZW52Ijp7IlNFQVJDSF9QUk9WSURFUiI6Imdvb2dsZSIsIlNFQVJDSF9FTkdJTkVfQVBJX0tFWSI6IltFTlRFUiBTRUFSQ0ggRU5HSU5FIEFQSSBLRVldIiwiR09PR0xFX1NFQVJDSF9FTkdJTkVfSUQiOiJbRU5URVIgR09PR0xFIFNFQVJDSCBFTkdJTkUgSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW1lPVVIgT1BFTiBBSSBLRVldIiwiRU1CRURESU5HX01PREVMX05BTUUiOiJ0ZXh0LWVtYmVkZGluZy0zLXNtYWxsIiwiU0lNSUxBUklUWV9USFJFU0hPTEQiOiIwLjcyIn19)
+[![Add MCP Server web-search to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=web-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCItZSIsIlNFQVJDSF9QUk9WSURFUiIsIi1lIiwiU0VBUkNIX0VOR0lORV9BUElfS0VZIiwiLWUiLCJHT09HTEVfU0VBUkNIX0VOR0lORV9JRCIsIi1lIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiLCItZSIsIkVNQkVERElOR19TRVJWRVJfQVBJX0tFWSIsIi1lIiwiRU1CRURESU5HX01PREVMX05BTUUiLCItZSIsIlNJTUlMQVJJVFlfVEhSRVNIT0xEIiwiLXYiLCJtY3BfZGF0YTovYXBwL2RhdGEiLCJkaW1pdHJpc2svbWNwLXNlYXJjaDpsYXRlc3QiXSwiZW52Ijp7IlNFQVJDSF9QUk9WSURFUiI6Imdvb2dsZSIsIlNFQVJDSF9FTkdJTkVfQVBJX0tFWSI6IltFTlRFUiBTRUFSQ0ggRU5HSU5FIEFQSSBLRVldIiwiR09PR0xFX1NFQVJDSF9FTkdJTkVfSUQiOiJbRU5URVIgR09PR0xFIFNFQVJDSCBFTkdJTkUgSURdIiwiRU1CRURESU5HX1NFUlZFUl9VUkwiOiJodHRwczovL2FwaS5vcGVuYWkuY29tIiwiRU1CRURESU5HX1NFUlZFUl9BUElfS0VZIjoiW1lPVVIgT1BFTiBBSSBLRVldIiwiRU1CRURESU5HX01PREVMX05BTUUiOiJ0ZXh0LWVtYmVkZGluZy0zLXNtYWxsIiwiU0lNSUxBUklUWV9USFJFU0hPTEQiOiIwLjcyIn19)
 
 ```json
 {
@@ -88,7 +102,7 @@ npx playwright@1.55.1 install --with-deps chromium
         "SIMILARITY_THRESHOLD",
         "-v",
         "mcp_data:/app/data",
-        "mcp-search:test"
+        "dimitrisk/mcp-search:latest"
       ],
       "env": {
         "SEARCH_PROVIDER": "google",

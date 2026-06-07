@@ -100,7 +100,7 @@ git push origin :refs/tags/v1.2.3
 git push origin +HEAD~1:main
 
 # Manual NPM unpublish (if needed, within 24h)
-npm unpublish mcp-search@1.2.3
+npm unpublish @dimitrk/mcp-search@1.2.3
 ```
 
 ## 🧪 Pre-Release Testing
