@@ -372,7 +372,16 @@ export async function handleReadFromPage(
               1024 // dummy dimension
             );
 
-            const matchingChunks = rawResults.slice(0, input.maxResults);
+            // Filter by query terms (same as the primary fallback above) so we
+            // don't return arbitrary chunks that are unrelated to the query.
+            const queryTerms = query.toLowerCase().split(/\s+/);
+            const matchingChunks = rawResults
+              .filter(chunk => {
+                const chunkText = chunk.text.toLowerCase();
+                return queryTerms.some(term => chunkText.includes(term));
+              })
+              .slice(0, input.maxResults);
+
             queryResults.push({
               query,
               results: RelevantChunkMapper.mapChunksToRelevant(matchingChunks),

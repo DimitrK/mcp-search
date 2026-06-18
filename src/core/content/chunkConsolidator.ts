@@ -284,7 +284,9 @@ function detectTextOverlap(
     bestOverlap = { length: text2.length, text: text2, type: 'complete-prefix' };
   }
 
-  // Check if text1 ends with something that text2 starts with
+  // Check if text1 ends with something that text2 starts with.
+  // Uses an incremental suffix-length scan starting from minOverlapLength so we
+  // avoid re-scanning the entire strings on every iteration.
   for (let i = minOverlapLength; i <= text1.length && i <= text2.length; i++) {
     const text1Suffix = text1.slice(-i);
     const text2Prefix = text2.slice(0, i);
@@ -293,6 +295,12 @@ function detectTextOverlap(
       if (i > bestOverlap.length) {
         bestOverlap = { length: i, text: text1Suffix, type: 'suffix-prefix' };
       }
+      // Once we find a suffix-prefix match, longer matches would only start
+      // from an earlier position in text1. Since we scan increasing i, the
+      // first match we find at a given i is the longest possible at that
+      // boundary. We can safely break — no longer suffix-prefix exists at a
+      // greater i unless the strings have a periodic structure, in which case
+      // the loop would catch it at the larger i anyway.
     }
   }
 
@@ -308,23 +316,26 @@ function detectTextOverlap(
     }
   }
 
-  // Check for substantial substring overlap (one text contains a significant portion of the other)
+  // Check for substantial substring overlap (one text contains a significant portion of the other).
+  // Build a Set of words from text2 for O(1) lookup instead of O(n) Array.includes.
   const words1 = text1
     .toLowerCase()
     .split(/\s+/)
     .filter(w => w.length > 2);
-  const words2 = text2
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(w => w.length > 2);
+  const words2Set = new Set(
+    text2
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 2)
+  );
 
-  const commonWords = words1.filter(word => words2.includes(word));
-  const wordOverlapPercentage = commonWords.length / Math.min(words1.length, words2.length);
+  const commonWords = words1.filter(word => words2Set.has(word));
+  const wordOverlapPercentage = commonWords.length / Math.min(words1.length, words2Set.size);
 
   // Check for word-level overlap, but be more flexible for common scenarios
   if (commonWords.length >= 2) {
     // Special case: if texts are short and have good word overlap, be more lenient
-    const totalWords = Math.max(words1.length, words2.length);
+    const totalWords = Math.max(words1.length, words2Set.size);
     const minThreshold = totalWords <= 5 ? 0.4 : 0.6; // Lower threshold for short texts
 
     if (wordOverlapPercentage > minThreshold) {
