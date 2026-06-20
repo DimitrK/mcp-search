@@ -117,6 +117,33 @@ describe('CheerioExtractor', () => {
     expect(result.textContent).not.toContain('Footer links');
   });
 
+  test('removes embedded CSS content from extracted text', async () => {
+    const styledHTML = `
+      <html>
+      <head>
+        <style>
+          .hero { color: red; }
+          .cta { display: none; }
+        </style>
+      </head>
+      <body>
+        <article>
+          <h1>Styled Article</h1>
+          <p>Visible article content.</p>
+        </article>
+      </body>
+      </html>
+    `;
+
+    const result = await extractWithCheerio(styledHTML, { url: 'https://example.com/styled' });
+
+    expect(result).toBeDefined();
+    expect(result.textContent).toContain('Styled Article');
+    expect(result.textContent).toContain('Visible article content.');
+    expect(result.textContent).not.toContain('.hero');
+    expect(result.textContent).not.toContain('display: none');
+  });
+
   test('handles nested semantic structures', async () => {
     const result = await extractWithCheerio(nestedSemanticHTML, {
       url: 'https://example.com/nested',

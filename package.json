@@ -88,7 +88,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@mozilla/readability": "0.6.0",
     "@types/turndown": "5.0.5",
-    "cheerio": "1.1.2",
+    "cheerio": "1.2.0",
     "env-paths": "3.0.0",
     "jsdom": "27.0.0",
     "pino": "10.1.0",
