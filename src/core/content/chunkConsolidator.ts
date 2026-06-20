@@ -284,7 +284,9 @@ function detectTextOverlap(
     bestOverlap = { length: text2.length, text: text2, type: 'complete-prefix' };
   }
 
-  // Check if text1 ends with something that text2 starts with
+  // Check if text1 ends with something that text2 starts with.
+  // Uses an incremental suffix-length scan starting from minOverlapLength so we
+  // avoid re-scanning the entire strings on every iteration.
   for (let i = minOverlapLength; i <= text1.length && i <= text2.length; i++) {
     const text1Suffix = text1.slice(-i);
     const text2Prefix = text2.slice(0, i);
@@ -293,6 +295,7 @@ function detectTextOverlap(
       if (i > bestOverlap.length) {
         bestOverlap = { length: i, text: text1Suffix, type: 'suffix-prefix' };
       }
+      // Keep scanning to allow longer suffix-prefix matches to be detected.
     }
   }
 
@@ -308,7 +311,10 @@ function detectTextOverlap(
     }
   }
 
-  // Check for substantial substring overlap (one text contains a significant portion of the other)
+  // Check for substantial substring overlap (one text contains a significant portion of the other).
+  // Build a Set of words from text2 for O(1) membership lookup, but keep the array
+  // form for sizing so duplicate words in text2 still count toward the denominator
+  // (preserving the original overlap semantics).
   const words1 = text1
     .toLowerCase()
     .split(/\s+/)
@@ -317,9 +323,11 @@ function detectTextOverlap(
     .toLowerCase()
     .split(/\s+/)
     .filter(w => w.length > 2);
+  const words2Set = new Set(words2);
 
-  const commonWords = words1.filter(word => words2.includes(word));
-  const wordOverlapPercentage = commonWords.length / Math.min(words1.length, words2.length);
+  const commonWords = words1.filter(word => words2Set.has(word));
+  const denom = Math.min(words1.length, words2.length);
+  const wordOverlapPercentage = denom > 0 ? commonWords.length / denom : 0;
 
   // Check for word-level overlap, but be more flexible for common scenarios
   if (commonWords.length >= 2) {
