@@ -295,12 +295,7 @@ function detectTextOverlap(
       if (i > bestOverlap.length) {
         bestOverlap = { length: i, text: text1Suffix, type: 'suffix-prefix' };
       }
-      // Once we find a suffix-prefix match, longer matches would only start
-      // from an earlier position in text1. Since we scan increasing i, the
-      // first match we find at a given i is the longest possible at that
-      // boundary. We can safely break — no longer suffix-prefix exists at a
-      // greater i unless the strings have a periodic structure, in which case
-      // the loop would catch it at the larger i anyway.
+      // Keep scanning to allow longer suffix-prefix matches to be detected.
     }
   }
 
