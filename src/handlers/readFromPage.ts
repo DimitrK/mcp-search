@@ -292,8 +292,14 @@ export async function handleReadFromPage(
             childLogger.debug({}, 'Using fallback content retrieval without embeddings');
 
             for (const query of queries) {
-              // Simple text matching fallback - get chunks that contain query terms
-              const queryTerms = query.toLowerCase().split(/\s+/);
+              // Simple text matching fallback - get chunks that contain query terms.
+              // Filter out empty terms (from leading/trailing whitespace) so that
+              // chunkText.includes('') — which is always true — doesn't disable
+              // filtering and return arbitrary chunks.
+              const queryTerms = query
+                .toLowerCase()
+                .split(/\s+/)
+                .filter(term => term.length > 0);
 
               try {
                 // Try to get any existing chunks for basic content return
@@ -374,7 +380,11 @@ export async function handleReadFromPage(
 
             // Filter by query terms (same as the primary fallback above) so we
             // don't return arbitrary chunks that are unrelated to the query.
-            const queryTerms = query.toLowerCase().split(/\s+/);
+            // Filter out empty terms for the same reason as above.
+            const queryTerms = query
+              .toLowerCase()
+              .split(/\s+/)
+              .filter(term => term.length > 0);
             const matchingChunks = rawResults
               .filter(chunk => {
                 const chunkText = chunk.text.toLowerCase();

@@ -167,11 +167,13 @@ This paragraph mentions a pipe | in the middle of prose.`;
 
       // At least one chunk should have overlap text. That overlap text should
       // contain a period (the terminator) rather than being stripped.
-      const overlapChunk = chunks.find(c => c.overlapTokens > 0);
-      if (overlapChunk) {
+      const overlapChunks = chunks.filter(c => c.overlapTokens > 0);
+      // Assert overlap was actually produced — otherwise the test passes vacuously.
+      expect(overlapChunks.length).toBeGreaterThan(0);
+      for (const chunk of overlapChunks) {
         // The overlap portion is prepended; it should contain at least one
         // sentence-ending period.
-        expect(overlapChunk.text).toMatch(/\.\s/);
+        expect(chunk.text).toMatch(/\.\s/);
       }
     });
   });
@@ -203,8 +205,11 @@ This paragraph mentions a pipe | in the middle of prose.`;
         overlapPercentage: 80,
       });
 
-      // Inspect all chunks for the double-period artifact.
-      for (const chunk of chunks) {
+      // Inspect all chunks for the double-period artifact, but only on chunks
+      // that actually have overlap text (otherwise the assertion is vacuous).
+      const overlapChunks = chunks.filter(c => c.overlapTokens > 0);
+      expect(overlapChunks.length).toBeGreaterThan(0);
+      for (const chunk of overlapChunks) {
         // ". . " would indicate a phantom separator was added after a sentence
         // that already retained its own period.
         expect(chunk.text).not.toMatch(/\.\s\.\s/);

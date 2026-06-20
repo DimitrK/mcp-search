@@ -312,25 +312,27 @@ function detectTextOverlap(
   }
 
   // Check for substantial substring overlap (one text contains a significant portion of the other).
-  // Build a Set of words from text2 for O(1) lookup instead of O(n) Array.includes.
+  // Build a Set of words from text2 for O(1) membership lookup, but keep the array
+  // form for sizing so duplicate words in text2 still count toward the denominator
+  // (preserving the original overlap semantics).
   const words1 = text1
     .toLowerCase()
     .split(/\s+/)
     .filter(w => w.length > 2);
-  const words2Set = new Set(
-    text2
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(w => w.length > 2)
-  );
+  const words2 = text2
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length > 2);
+  const words2Set = new Set(words2);
 
   const commonWords = words1.filter(word => words2Set.has(word));
-  const wordOverlapPercentage = commonWords.length / Math.min(words1.length, words2Set.size);
+  const denom = Math.min(words1.length, words2.length);
+  const wordOverlapPercentage = denom > 0 ? commonWords.length / denom : 0;
 
   // Check for word-level overlap, but be more flexible for common scenarios
   if (commonWords.length >= 2) {
     // Special case: if texts are short and have good word overlap, be more lenient
-    const totalWords = Math.max(words1.length, words2Set.size);
+    const totalWords = Math.max(words1.length, words2.length);
     const minThreshold = totalWords <= 5 ? 0.4 : 0.6; // Lower threshold for short texts
 
     if (wordOverlapPercentage > minThreshold) {
