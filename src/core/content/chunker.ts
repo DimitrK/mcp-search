@@ -214,7 +214,8 @@ class SemanticChunker {
           const nextLine = lines[j];
           if (
             nextLine.includes('|') &&
-            (nextLine.trim().startsWith('|') || nextLine.includes('|'))
+            nextLine.trim().startsWith('|') &&
+            nextLine.trim().endsWith('|')
           ) {
             tableLines.push(nextLine);
             currentPosition += nextLine.length + 1;
@@ -270,9 +271,36 @@ class SemanticChunker {
         continue;
       }
 
-      // Regular paragraph or other content
+      // Regular paragraph or other content.
+      // Collect consecutive non-structural lines into a single paragraph block.
+      // A new block starts when a blank line was seen or when structural elements
+      // (headings, code, lists, tables, blockquotes) are encountered.
+      const paragraphLines = [line];
+      let j = i + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        // Blank line terminates the paragraph
+        if (!nextLine.trim()) break;
+        // Structural elements terminate the paragraph
+        if (nextLine.match(/^(#{1,6})\s+/)) break; // heading
+        if (nextLine.match(/^```/)) break; // code block
+        if (nextLine.match(/^[-*]\s+/) || nextLine.match(/^\d+\.\s+/)) break; // list
+        if (
+          nextLine.includes('|') &&
+          nextLine.trim().startsWith('|') &&
+          nextLine.trim().endsWith('|')
+        )
+          break; // table
+        if (nextLine.trim().startsWith('>')) break; // blockquote
+        // Otherwise, this is a continuation line of the same paragraph
+        paragraphLines.push(nextLine);
+        currentPosition += nextLine.length + 1;
+        j++;
+      }
+      i = j - 1; // Update outer loop position
+
       blocks.push({
-        text: line,
+        text: paragraphLines.join('\n'),
         sectionPath: [...currentSectionPath],
         type: 'paragraph',
         position: linePosition,
@@ -572,10 +600,12 @@ class SemanticChunker {
       let overlapText = '';
       let currentLength = 0;
 
-      // Work backwards from the end, adding complete sentences
+      // Work backwards from the end, adding complete sentences.
+      // Sentences from smartSentenceSplit retain their own terminators (., !, ?),
+      // so we join with a single space — no synthetic ". " separators.
       for (let i = sentences.length - 1; i >= 0; i--) {
         const sentence = sentences[i];
-        const sentenceWithSpace = sentence + (overlapText ? '. ' : '');
+        const sentenceWithSpace = sentence + (overlapText ? ' ' : '');
         const newLength = currentLength + sentenceWithSpace.length;
 
         // If adding this sentence would exceed target significantly, try word-level
@@ -583,7 +613,7 @@ class SemanticChunker {
           break;
         }
 
-        overlapText = sentence + (overlapText ? '. ' + overlapText : '');
+        overlapText = sentence + (overlapText ? ' ' + overlapText : '');
         currentLength = newLength;
 
         const currentTokens = Math.ceil(currentLength / this.CHARS_PER_TOKEN);
@@ -663,11 +693,22 @@ class SemanticChunker {
       return placeholder;
     });
 
-    // Split on sentence endings followed by whitespace and capital letter
-    const sentences = tempText.split(/[.!?]+(?=\s+[A-Z])/);
+    // Split on sentence endings followed by whitespace and capital letter.
+    // Use a capturing group for the sentence terminator so it is preserved in
+    // the resulting chunks (the previous lookahead-only split consumed it).
+    const sentences = tempText.split(/([.!?]+)(?=\s+[A-Z])/);
+
+    // The split with a capturing group produces alternating non-matching and
+    // matching segments. Rejoin each terminator with its preceding sentence.
+    const rejoined: string[] = [];
+    for (let k = 0; k < sentences.length; k += 2) {
+      const segment = sentences[k] ?? '';
+      const terminator = sentences[k + 1] ?? '';
+      rejoined.push(segment + terminator);
+    }
 
     // Restore abbreviations
-    return sentences
+    return rejoined
       .map(sentence => {
         let restored = sentence;
         while (restored.includes(placeholder) && abbreviationMap.length > 0) {
