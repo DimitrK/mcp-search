@@ -94,7 +94,7 @@
     "pino": "10.1.0",
     "rate-limiter-flexible": "5.0.0",
     "turndown": "7.2.1",
-    "undici": "6.26.0",
+    "undici": "6.28.0",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.2"
   },
